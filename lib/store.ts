@@ -64,6 +64,8 @@ interface PosterStore {
   setWatermarkSize: (size: number) => void;
   showGrid: boolean;
   setShowGrid: (show: boolean) => void;
+  aspectRatio: '3:4' | '4:5';
+  setAspectRatio: (ratio: '3:4' | '4:5') => void;
   
   // Export
   exportedUrl: string;
@@ -194,6 +196,7 @@ export const usePosterStore = create<PosterStore>()(
       watermarkOpacity: defaultTemplates[0].settings.watermarkOpacity,
       watermarkSize: defaultTemplates[0].settings.watermarkSize,
       showGrid: false,
+      aspectRatio: '3:4',
       exportedUrl: '',
       recentExports: [],
       activities: [],
@@ -473,6 +476,7 @@ export const usePosterStore = create<PosterStore>()(
       setWatermarkOpacity: (opacity) => set({ watermarkOpacity: opacity }),
       setWatermarkSize: (size) => set({ watermarkSize: size }),
       setShowGrid: (show) => set({ showGrid: show }),
+      setAspectRatio: (ratio) => set({ aspectRatio: ratio }),
       setExportedUrl: (url) => set({ exportedUrl: url }),
       
       // Export actions

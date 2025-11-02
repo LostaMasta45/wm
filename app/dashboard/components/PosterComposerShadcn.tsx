@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import SliderWithInput from './SliderWithInput';
 
 export default function PosterComposerShadcn() {
   const {
@@ -25,6 +26,8 @@ export default function PosterComposerShadcn() {
     setPadding,
     watermarkOpacity,
     setWatermarkOpacity,
+    aspectRatio,
+    setAspectRatio,
     addRecentExport,
     updateTemplate,
     reset,
@@ -109,8 +112,9 @@ export default function PosterComposerShadcn() {
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
+    // Calculate dimensions based on aspect ratio
     const width = 1080;
-    const height = 1440;
+    const height = aspectRatio === '3:4' ? 1440 : 1350; // 3:4 = 1080x1440, 4:5 = 1080x1350
     canvas.width = width;
     canvas.height = height;
 
@@ -199,7 +203,7 @@ export default function PosterComposerShadcn() {
     };
 
     render();
-  }, [selectedTemplate, posterUrl, padding, watermarkOpacity]);
+  }, [selectedTemplate, posterUrl, padding, watermarkOpacity, aspectRatio]);
 
   // Handle template settings
   const handleOpenSettings = (e: React.MouseEvent, template: typeof templates[0]) => {
@@ -320,33 +324,30 @@ export default function PosterComposerShadcn() {
               </p>
             </div>
 
-            {/* Template Cards - Horizontal Scroll */}
-            <ScrollArea className="w-full">
-              <div className="flex gap-3 sm:gap-4 pb-4">
-                {templates.map((template, index) => (
-                  <motion.div
-                    key={template.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                    className="shrink-0"
+            {/* Template Cards - Compact Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+              {templates.map((template, index) => (
+                <motion.div
+                  key={template.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <Card 
+                    className={`cursor-pointer transition-all ${
+                      selectedTemplate?.id === template.id
+                        ? 'ring-2 ring-primary shadow-lg'
+                        : 'hover:shadow-md'
+                    }`}
+                    onClick={() => setSelectedTemplate(template)}
                   >
-                    <Card 
-                      className={`w-48 sm:w-56 lg:w-64 cursor-pointer transition-all ${
-                        selectedTemplate?.id === template.id
-                          ? 'ring-2 ring-primary shadow-lg'
-                          : 'hover:shadow-md'
-                      }`}
-                      onClick={() => setSelectedTemplate(template)}
-                    >
-                      {/* Template Preview */}
-                      <CardContent className="p-0 relative aspect-[3/4] bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/50 dark:to-purple-900/50">
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="text-6xl mb-2">🎨</div>
-                            <div className="text-xs font-mono text-gray-600 dark:text-gray-400">3:4</div>
-                          </div>
+                    {/* Template Preview */}
+                    <CardContent className="p-0 relative aspect-[3/4] bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/50 dark:to-purple-900/50">
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="text-center">
+                          <div className="text-4xl sm:text-5xl mb-2">🎨</div>
                         </div>
+                      </div>
                         
                         {/* Selected Badge */}
                         {selectedTemplate?.id === template.id && (
@@ -362,40 +363,34 @@ export default function PosterComposerShadcn() {
                         )}
                       </CardContent>
 
-                      {/* Template Info */}
-                      <CardHeader className={`p-3 sm:p-4 ${
-                        selectedTemplate?.id === template.id
-                          ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white'
-                          : ''
-                      }`}>
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <CardTitle className="text-base sm:text-lg truncate">
-                              {template.name}
-                            </CardTitle>
-                            <CardDescription className={`text-xs sm:text-sm mt-0.5 truncate ${
-                              selectedTemplate?.id === template.id ? 'text-blue-100' : ''
-                            }`}>
-                              {template.brandSlug}
-                            </CardDescription>
-                          </div>
-                          
-                          {/* Edit Button */}
-                          <Button
-                            variant={selectedTemplate?.id === template.id ? "secondary" : "ghost"}
-                            size="icon"
-                            className="shrink-0 h-7 w-7"
-                            onClick={(e) => handleOpenSettings(e, template)}
-                          >
-                            <Settings className="h-3.5 w-3.5" />
-                          </Button>
+                    {/* Template Info */}
+                    <CardHeader className={`p-2.5 sm:p-3 ${
+                      selectedTemplate?.id === template.id
+                        ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white'
+                        : ''
+                    }`}>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="flex-1 min-w-0">
+                          <CardTitle className="text-sm sm:text-base truncate">
+                            {template.name}
+                          </CardTitle>
                         </div>
-                      </CardHeader>
-                    </Card>
-                  </motion.div>
-                ))}
-              </div>
-            </ScrollArea>
+                        
+                        {/* Edit Button */}
+                        <Button
+                          variant={selectedTemplate?.id === template.id ? "secondary" : "ghost"}
+                          size="icon"
+                          className="shrink-0 h-6 w-6"
+                          onClick={(e) => handleOpenSettings(e, template)}
+                        >
+                          <Settings className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
           </section>
 
           <Separator />
@@ -403,12 +398,37 @@ export default function PosterComposerShadcn() {
           {/* Step 2: Live Preview */}
           <section>
             <div className="mb-4 sm:mb-6">
-              <div className="flex items-center gap-3 mb-2">
-                <Badge variant="secondary">2</Badge>
-                <h2 className="text-lg sm:text-xl font-bold">Live Preview</h2>
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex items-center gap-3">
+                  <Badge variant="secondary">2</Badge>
+                  <h2 className="text-lg sm:text-xl font-bold">Live Preview</h2>
+                </div>
+                
+                {/* Aspect Ratio Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm text-muted-foreground hidden sm:inline">Ukuran:</span>
+                  <div className="flex gap-1.5">
+                    <Button
+                      variant={aspectRatio === '3:4' ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setAspectRatio('3:4')}
+                    >
+                      3:4
+                    </Button>
+                    <Button
+                      variant={aspectRatio === '4:5' ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setAspectRatio('4:5')}
+                    >
+                      4:5
+                    </Button>
+                  </div>
+                </div>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground ml-9">
-                {posterUrl ? 'Lihat preview poster Anda' : 'Upload poster untuk melihat preview'}
+                {posterUrl ? `Preview poster ${aspectRatio === '3:4' ? '1080x1440' : '1080x1350'} pixels` : 'Upload poster untuk melihat preview'}
               </p>
             </div>
 
@@ -425,7 +445,7 @@ export default function PosterComposerShadcn() {
                         : 'border-border hover:border-primary/50 hover:bg-accent'
                       }
                     `}
-                    style={{ aspectRatio: '3/4' }}
+                    style={{ aspectRatio: aspectRatio === '3:4' ? '3/4' : '4/5' }}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
                     onDragOver={handleDrag}
@@ -484,7 +504,7 @@ export default function PosterComposerShadcn() {
                 ) : (
                   /* Canvas Preview */
                   <div className="space-y-3 sm:space-y-4">
-                    <div className="relative rounded-xl overflow-hidden shadow-xl" style={{ aspectRatio: '3/4' }}>
+                    <div className="relative rounded-xl overflow-hidden shadow-xl" style={{ aspectRatio: aspectRatio === '3:4' ? '3/4' : '4/5' }}>
                       <canvas
                         ref={canvasRef}
                         className="w-full h-full"
@@ -497,7 +517,7 @@ export default function PosterComposerShadcn() {
                       </Badge>
                       
                       <Badge variant="secondary" className="absolute top-2 right-2 sm:top-4 sm:right-4">
-                        1080 × 1440
+                        {aspectRatio === '3:4' ? '1080 × 1440' : '1080 × 1350'}
                       </Badge>
                     </div>
 
@@ -544,44 +564,30 @@ export default function PosterComposerShadcn() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
                       
                       {/* Padding Control */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <label className="text-sm font-semibold">Padding (Jarak Tepi)</label>
-                          <Badge variant="secondary" className="ml-2">{padding}%</Badge>
-                        </div>
-                        <Slider
-                          value={[padding]}
-                          onValueChange={([value]) => setPadding(value)}
-                          min={0}
-                          max={30}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Tidak ada</span>
-                          <span>Maximum</span>
-                        </div>
-                      </div>
+                      <SliderWithInput
+                        label="Padding (Jarak Tepi)"
+                        value={padding}
+                        onChange={setPadding}
+                        min={0}
+                        max={30}
+                        step={1}
+                        unit="%"
+                        minLabel="Tidak ada"
+                        maxLabel="Maximum"
+                      />
 
                       {/* Watermark Opacity Control */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <label className="text-sm font-semibold">Watermark Opacity</label>
-                          <Badge variant="secondary" className="ml-2">{watermarkOpacity}%</Badge>
-                        </div>
-                        <Slider
-                          value={[watermarkOpacity]}
-                          onValueChange={([value]) => setWatermarkOpacity(value)}
-                          min={0}
-                          max={100}
-                          step={1}
-                          className="w-full"
-                        />
-                        <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>Transparan</span>
-                          <span>Penuh</span>
-                        </div>
-                      </div>
+                      <SliderWithInput
+                        label="Watermark Opacity"
+                        value={watermarkOpacity}
+                        onChange={setWatermarkOpacity}
+                        min={0}
+                        max={100}
+                        step={1}
+                        unit="%"
+                        minLabel="Transparan"
+                        maxLabel="Penuh"
+                      />
                     </div>
                   </CardContent>
                 </Card>
@@ -626,7 +632,7 @@ export default function PosterComposerShadcn() {
                     </Button>
                   </CardContent>
                   <CardFooter className="justify-center text-sm text-blue-100">
-                    Format: PNG • Ukuran: 1080 × 1440 pixels • High Quality
+                    Format: PNG • Ukuran: {aspectRatio === '3:4' ? '1080 × 1440' : '1080 × 1350'} pixels • High Quality
                   </CardFooter>
                 </Card>
               </motion.section>

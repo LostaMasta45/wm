@@ -7,6 +7,7 @@ import { Download, Upload, Sparkles, Check, X, Sun, Moon, Settings } from 'lucid
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 import TemplateSettingsModal from './TemplateSettingsModal';
+import SliderWithInput from './SliderWithInput';
 
 export default function PosterComposerJobMate() {
   const {
@@ -33,6 +34,7 @@ export default function PosterComposerJobMate() {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [selectedTemplateForSettings, setSelectedTemplateForSettings] = useState<typeof templates[0] | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<'3:4' | '4:5'>('3:4');
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -114,8 +116,9 @@ export default function PosterComposerJobMate() {
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
+    // Calculate dimensions based on aspect ratio
     const width = 1080;
-    const height = 1440;
+    const height = aspectRatio === '3:4' ? 1440 : 1350; // 3:4 = 1080x1440, 4:5 = 1080x1350
     canvas.width = width;
     canvas.height = height;
 
@@ -227,7 +230,7 @@ export default function PosterComposerJobMate() {
     };
 
     render();
-  }, [selectedTemplate, posterUrl, padding, watermarkOpacity, watermarkSize]);
+  }, [selectedTemplate, posterUrl, padding, watermarkOpacity, watermarkSize, aspectRatio]);
 
   // Handle template settings
   const handleOpenSettings = (e: React.MouseEvent, template: typeof templates[0]) => {
@@ -308,11 +311,12 @@ export default function PosterComposerJobMate() {
       link.click();
       document.body.removeChild(link);
 
+      const height = aspectRatio === '3:4' ? 1440 : 1350;
       addRecentExport({
         url: url,
         thumbnail: url,
         templateName: selectedTemplate?.name || 'Unknown',
-        dimensions: '1080 × 1440',
+        dimensions: `1080 × ${height}`,
         size: Math.round(blob.size / 1024) + ' KB',
       });
 
@@ -377,7 +381,7 @@ export default function PosterComposerJobMate() {
 
             {/* Template Cards - Horizontal Scroll */}
             <div className="relative -mx-4 md:mx-0">
-              <div className="flex gap-2 sm:gap-3 md:gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-hide px-4 md:px-0">
+              <div className="flex gap-2 sm:gap-2.5 md:gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide px-4 md:px-0">
                 {templates.map((template, index) => (
                   <motion.div
                     key={template.id}
@@ -388,7 +392,7 @@ export default function PosterComposerJobMate() {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
                     className={`
-                      relative flex-shrink-0 w-32 sm:w-40 md:w-44 lg:w-48 rounded-lg overflow-hidden snap-start cursor-pointer border-2 transition-all
+                      relative flex-shrink-0 w-[120px] sm:w-[140px] md:w-[160px] lg:w-[180px] rounded-lg overflow-hidden snap-start cursor-pointer border-2 transition-all
                       ${selectedTemplate?.id === template.id
                         ? 'border-black dark:border-white shadow-lg'
                         : 'border-gray-200 dark:border-gray-800 hover:border-gray-400 dark:hover:border-gray-600'
@@ -411,16 +415,16 @@ export default function PosterComposerJobMate() {
 
                     {/* Template Info */}
                     <div className={`
-                      p-2 sm:p-2.5 md:p-3 transition-colors
+                      p-1.5 sm:p-2 md:p-2.5 transition-colors
                       ${selectedTemplate?.id === template.id
                         ? 'bg-black dark:bg-white text-white dark:text-black'
                         : 'bg-white dark:bg-black text-black dark:text-white'
                       }
                     `}>
-                      <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+                      <div className="flex items-center justify-between gap-1 sm:gap-1.5">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-xs sm:text-sm md:text-base truncate">{template.name}</h3>
-                          <p className={`text-[10px] sm:text-xs truncate ${
+                          <h3 className="font-semibold text-[11px] sm:text-xs md:text-sm truncate">{template.name}</h3>
+                          <p className={`text-[9px] sm:text-[10px] truncate ${
                             selectedTemplate?.id === template.id
                               ? 'text-gray-300 dark:text-gray-700'
                               : 'text-gray-500 dark:text-gray-400'
@@ -433,7 +437,7 @@ export default function PosterComposerJobMate() {
                         <button
                           onClick={(e) => handleOpenSettings(e, template)}
                           className={`
-                            flex-shrink-0 p-1 sm:p-1.5 rounded transition-colors border
+                            flex-shrink-0 p-0.5 sm:p-1 rounded transition-colors border
                             ${selectedTemplate?.id === template.id
                               ? 'border-white/30 dark:border-black/30 hover:bg-white/10 dark:hover:bg-black/10'
                               : 'border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-900'
@@ -441,7 +445,7 @@ export default function PosterComposerJobMate() {
                           `}
                           title="Edit"
                         >
-                          <Settings className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <Settings className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                         </button>
                       </div>
                     </div>
@@ -456,13 +460,37 @@ export default function PosterComposerJobMate() {
             
             {/* Left: Preview */}
             <div className="lg:col-span-2">
-              <div className="mb-2 sm:mb-3">
+              <div className="mb-2 sm:mb-3 flex items-center justify-between gap-3">
                 <h2 className="text-sm md:text-base font-semibold text-black dark:text-white flex items-center gap-1.5 sm:gap-2">
                   <span className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold">
                     2
                   </span>
                   <span>Preview</span>
                 </h2>
+                
+                {/* Aspect Ratio Selector */}
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <button
+                    onClick={() => setAspectRatio('3:4')}
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                      aspectRatio === '3:4'
+                        ? 'bg-black dark:bg-white text-white dark:text-black'
+                        : 'bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    3:4
+                  </button>
+                  <button
+                    onClick={() => setAspectRatio('4:5')}
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                      aspectRatio === '4:5'
+                        ? 'bg-black dark:bg-white text-white dark:text-black'
+                        : 'bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800'
+                    }`}
+                  >
+                    4:5
+                  </button>
+                </div>
               </div>
 
               {/* Preview Container */}
@@ -478,7 +506,7 @@ export default function PosterComposerJobMate() {
                         : 'border-gray-300 dark:border-gray-700 hover:border-black dark:hover:border-white hover:bg-gray-50 dark:hover:bg-gray-900'
                       }
                     `}
-                    style={{ aspectRatio: '3/4' }}
+                    style={{ aspectRatio: aspectRatio === '3:4' ? '3/4' : '4/5' }}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
                     onDragOver={handleDrag}
@@ -530,7 +558,7 @@ export default function PosterComposerJobMate() {
                   ) : (
                     /* Canvas Preview */
                     <div className="space-y-3">
-                      <div className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800" style={{ aspectRatio: '3/4' }}>
+                      <div className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800" style={{ aspectRatio: aspectRatio === '3:4' ? '3/4' : '4/5' }}>
                         <canvas
                           ref={canvasRef}
                           className="w-full h-full"
@@ -543,7 +571,7 @@ export default function PosterComposerJobMate() {
                         </div>
                         
                         <div className="absolute top-2 right-2 sm:top-3 sm:right-3 px-2 py-1 sm:px-3 sm:py-1.5 bg-black dark:bg-white backdrop-blur-sm rounded text-white dark:text-black text-[10px] sm:text-xs font-mono">
-                          1080×1440
+                          1080×{aspectRatio === '3:4' ? '1440' : '1350'}
                         </div>
                       </div>
 
@@ -586,73 +614,50 @@ export default function PosterComposerJobMate() {
 
                     <div className="bg-white dark:bg-black rounded-lg border-2 border-gray-200 dark:border-gray-800 p-3 sm:p-4 md:p-5">
                       <div className="space-y-4 sm:space-y-5 md:space-y-6">
+                        {isSaving && (
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 animate-pulse text-center">
+                            Auto-saving...
+                          </div>
+                        )}
                     
                         {/* Padding Control */}
-                        <div>
-                          <div className="flex items-center justify-between mb-2 sm:mb-3">
-                            <label className="text-xs sm:text-sm font-medium text-black dark:text-white">
-                              Padding
-                            </label>
-                            <div className="flex items-center gap-2">
-                              {isSaving && (
-                                <span className="text-[10px] text-gray-500 dark:text-gray-400 animate-pulse">
-                                  Saving...
-                                </span>
-                              )}
-                              <span className="text-xs sm:text-sm font-bold text-black dark:text-white px-1.5 py-0.5 sm:px-2 sm:py-1 bg-gray-100 dark:bg-gray-900 rounded">
-                                {padding}%
-                              </span>
-                            </div>
-                          </div>
-                          <input
-                            type="range"
-                            min="0"
-                            max="30"
-                            value={padding}
-                            onChange={(e) => setPadding(Number(e.target.value))}
-                            className="modern-slider w-full"
-                          />
-                        </div>
+                        <SliderWithInput
+                          label="Padding"
+                          value={padding}
+                          onChange={setPadding}
+                          min={0}
+                          max={30}
+                          step={1}
+                          unit="%"
+                          minLabel="0%"
+                          maxLabel="30%"
+                        />
 
                         {/* Watermark Size Control */}
-                        <div>
-                          <div className="flex items-center justify-between mb-2 sm:mb-3">
-                            <label className="text-xs sm:text-sm font-medium text-black dark:text-white">
-                              Watermark Size
-                            </label>
-                            <span className="text-xs sm:text-sm font-bold text-black dark:text-white px-1.5 py-0.5 sm:px-2 sm:py-1 bg-gray-100 dark:bg-gray-900 rounded">
-                              {watermarkSize}%
-                            </span>
-                          </div>
-                          <input
-                            type="range"
-                            min="10"
-                            max="100"
-                            value={watermarkSize}
-                            onChange={(e) => setWatermarkSize(Number(e.target.value))}
-                            className="modern-slider w-full"
-                          />
-                        </div>
+                        <SliderWithInput
+                          label="Watermark Size"
+                          value={watermarkSize}
+                          onChange={setWatermarkSize}
+                          min={10}
+                          max={100}
+                          step={1}
+                          unit="%"
+                          minLabel="10%"
+                          maxLabel="100%"
+                        />
 
                         {/* Watermark Opacity Control */}
-                        <div>
-                          <div className="flex items-center justify-between mb-2 sm:mb-3">
-                            <label className="text-xs sm:text-sm font-medium text-black dark:text-white">
-                              Watermark Opacity
-                            </label>
-                            <span className="text-xs sm:text-sm font-bold text-black dark:text-white px-1.5 py-0.5 sm:px-2 sm:py-1 bg-gray-100 dark:bg-gray-900 rounded">
-                              {watermarkOpacity}%
-                            </span>
-                          </div>
-                          <input
-                            type="range"
-                            min="0"
-                            max="100"
-                            value={watermarkOpacity}
-                            onChange={(e) => setWatermarkOpacity(Number(e.target.value))}
-                            className="modern-slider w-full"
-                          />
-                        </div>
+                        <SliderWithInput
+                          label="Watermark Opacity"
+                          value={watermarkOpacity}
+                          onChange={setWatermarkOpacity}
+                          min={0}
+                          max={100}
+                          step={1}
+                          unit="%"
+                          minLabel="0%"
+                          maxLabel="100%"
+                        />
                       </div>
                     </div>
                   </div>
@@ -677,7 +682,7 @@ export default function PosterComposerJobMate() {
                       )}
                     </button>
                     <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 text-center mt-2 sm:mt-3">
-                      1080×1440 px • High Quality
+                      1080×{aspectRatio === '3:4' ? '1440' : '1350'} px • High Quality
                     </p>
                   </div>
                 </motion.div>
