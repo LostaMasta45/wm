@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePosterStore } from '@/lib/store';
 import { toast, Toaster } from 'sonner';
-import { Download, Upload, Sparkles, Check, X, Sun, Moon, Settings } from 'lucide-react';
+import { Download, Upload, Sparkles, Check, X, Sun, Moon, Settings, History } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 import TemplateSettingsModal from './TemplateSettingsModal';
@@ -35,6 +35,7 @@ export default function PosterComposerJobMate() {
   const [selectedTemplateForSettings, setSelectedTemplateForSettings] = useState<typeof templates[0] | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<'3:4' | '4:5'>('3:4');
+  const [isSavingToHistory, setIsSavingToHistory] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -326,6 +327,73 @@ export default function PosterComposerJobMate() {
       toast.error('Export gagal, coba lagi ya!', { id: 'export' });
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  // Save to history handler
+  const handleSaveToHistory = async () => {
+    if (!posterUrl || !selectedTemplate) {
+      toast.error('Upload poster dan pilih template dulu ya!');
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      toast.error('Canvas belum siap!');
+      return;
+    }
+
+    setIsSavingToHistory(true);
+    toast.loading('Menyimpan ke history...', { id: 'save-history' });
+
+    try {
+      // Convert canvas to blob
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, 'image/png', 1.0);
+      });
+
+      if (!blob) throw new Error('Failed to create image blob');
+
+      // Create object URL for the poster
+      const posterDataUrl = canvas.toDataURL('image/png', 1.0);
+      
+      const height = aspectRatio === '3:4' ? 1440 : 1350;
+      const fileSizeKB = Math.round(blob.size / 1024);
+
+      // Save to database
+      const response = await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template_id: selectedTemplate.id,
+          template_name: selectedTemplate.name,
+          brand_slug: selectedTemplate.brandSlug,
+          poster_url: posterDataUrl, // Save as base64 data URL
+          thumbnail_url: posterDataUrl,
+          settings: {
+            padding,
+            watermarkOpacity,
+            watermarkSize,
+            aspectRatio,
+            backgroundColor: selectedTemplate.settings.backgroundColor,
+          },
+          dimensions: `1080 × ${height}`,
+          file_size: `${fileSizeKB} KB`,
+          format: 'png',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save to history');
+      }
+
+      const result = await response.json();
+      toast.success('Berhasil disimpan ke history! ✅', { id: 'save-history' });
+    } catch (error) {
+      console.error('Save to history error:', error);
+      toast.error('Gagal menyimpan ke history!', { id: 'save-history' });
+    } finally {
+      setIsSavingToHistory(false);
     }
   };
 
@@ -662,8 +730,9 @@ export default function PosterComposerJobMate() {
                     </div>
                   </div>
 
-                  {/* Export Button */}
-                  <div className="bg-white dark:bg-black rounded-lg border-2 border-gray-200 dark:border-gray-800 p-3 sm:p-4 md:p-5">
+                  {/* Export & Save Buttons */}
+                  <div className="bg-white dark:bg-black rounded-lg border-2 border-gray-200 dark:border-gray-800 p-3 sm:p-4 md:p-5 space-y-3">
+                    {/* Download Button */}
                     <button
                       onClick={handleExport}
                       disabled={isExporting}
@@ -681,7 +750,27 @@ export default function PosterComposerJobMate() {
                         </>
                       )}
                     </button>
-                    <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 text-center mt-2 sm:mt-3">
+
+                    {/* Save to History Button */}
+                    <button
+                      onClick={handleSaveToHistory}
+                      disabled={isSavingToHistory}
+                      className="w-full px-4 py-2.5 sm:py-3 bg-white dark:bg-black border-2 border-gray-300 dark:border-gray-700 hover:border-black dark:hover:border-white text-black dark:text-white rounded-lg font-bold text-xs sm:text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isSavingToHistory ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-black/30 dark:border-white/30 border-t-black dark:border-t-white rounded-full animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <History className="w-4 h-4" />
+                          <span>Save to History</span>
+                        </>
+                      )}
+                    </button>
+
+                    <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 text-center">
                       1080×{aspectRatio === '3:4' ? '1440' : '1350'} px • High Quality
                     </p>
                   </div>

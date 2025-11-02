@@ -81,3 +81,25 @@ export type Output = {
   bytes?: number;
   created_at: string;
 };
+
+export type PosterHistory = {
+  id: string;
+  template_id: string;
+  template_name: string;
+  brand_slug: string;
+  poster_url: string;
+  thumbnail_url?: string;
+  settings: {
+    padding: number;
+    watermarkOpacity: number;
+    watermarkSize: number;
+    aspectRatio: '3:4' | '4:5';
+    backgroundColor?: string;
+  };
+  dimensions?: string;
+  file_size?: string;
+  format?: string;
+  user_id?: string;
+  created_at: string;
+  updated_at: string;
+};

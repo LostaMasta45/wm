@@ -76,23 +76,21 @@ export default function SliderWithInput({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-semibold">{label}</label>
+        <label className="text-sm font-semibold text-foreground">{label}</label>
         
         <div className="flex items-center gap-2">
           {/* Decrement Button */}
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-7 w-7 shrink-0"
+          <button
             onClick={handleDecrement}
             disabled={value <= min}
+            className="h-8 w-8 rounded-lg border-2 border-border bg-background hover:bg-accent text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center font-bold text-lg"
           >
-            <Minus className="h-3.5 w-3.5" />
-          </Button>
+            <Minus className="h-4 w-4" />
+          </button>
 
           {/* Value Display/Input */}
           {isEditing ? (
-            <Input
+            <input
               type="number"
               value={inputValue}
               onChange={handleInputChange}
@@ -101,48 +99,75 @@ export default function SliderWithInput({
               min={min}
               max={max}
               step={step}
-              className="h-7 w-16 text-center px-2 text-sm"
+              className="h-8 w-20 text-center px-2 text-sm font-bold border-2 border-primary rounded-lg bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               autoFocus
               onFocus={(e) => e.target.select()}
             />
           ) : (
-            <Badge
-              variant="secondary"
-              className="cursor-pointer hover:bg-secondary/80 transition-colors min-w-[4rem] justify-center"
+            <button
               onClick={handleBadgeClick}
+              className="h-8 px-4 min-w-[5rem] rounded-lg bg-primary text-primary-foreground font-bold text-sm hover:bg-primary/90 transition-colors"
             >
               {value}{unit}
-            </Badge>
+            </button>
           )}
 
           {/* Increment Button */}
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-7 w-7 shrink-0"
+          <button
             onClick={handleIncrement}
             disabled={value >= max}
+            className="h-8 w-8 rounded-lg border-2 border-border bg-background hover:bg-accent text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center font-bold text-lg"
           >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
+            <Plus className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
       {/* Slider */}
-      <Slider
-        value={[value]}
-        onValueChange={([val]) => onChange(val)}
-        min={min}
-        max={max}
-        step={step}
-        className="w-full"
-      />
+      <div className="relative">
+        <Slider
+          value={[value]}
+          onValueChange={([val]) => onChange(val)}
+          min={min}
+          max={max}
+          step={step}
+          className="w-full slider-modern"
+        />
+      </div>
 
       {/* Min/Max Labels */}
-      <div className="flex justify-between text-xs text-muted-foreground">
+      <div className="flex justify-between text-xs font-medium text-muted-foreground">
         <span>{minLabel}</span>
         <span>{maxLabel}</span>
       </div>
+      
+      {/* Custom Slider Styles */}
+      <style jsx>{`
+        :global(.slider-modern [role="slider"]) {
+          background-color: #000 !important;
+          border: 2px solid #000 !important;
+          width: 20px !important;
+          height: 20px !important;
+        }
+        
+        :global(.dark .slider-modern [role="slider"]) {
+          background-color: #fff !important;
+          border: 2px solid #fff !important;
+        }
+        
+        :global(.slider-modern [role="slider"]:hover) {
+          transform: scale(1.1);
+        }
+        
+        :global(.slider-modern [data-orientation="horizontal"]) {
+          height: 6px !important;
+          background-color: #e5e7eb !important;
+        }
+        
+        :global(.dark .slider-modern [data-orientation="horizontal"]) {
+          background-color: #374151 !important;
+        }
+      `}</style>
     </div>
   );
 }
