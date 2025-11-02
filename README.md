@@ -1,36 +1,245 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Poster Composer Web
 
-## Getting Started
+Sistem otomatis untuk menghasilkan poster lowongan kerja berformat 3:4 dengan branding konsisten.
 
-First, run the development server:
+## 🚀 Features
+
+- **Automated Poster Generation**: Upload poster asli → output branded poster dalam format 3:4, 9:16 (Story), atau A4 PDF
+- **Brand Preset System**: Template konfigurasi untuk setiap brand (background, watermark, footer)
+- **Real-time Preview**: Canvas preview di browser dengan update langsung
+- **Multi-brand Support**: Kelola berbagai brand dalam satu platform
+- **Batch Export**: Render banyak poster sekaligus
+- **Audit Logging**: Track semua aktivitas admin
+
+## 🛠 Tech Stack
+
+- **Frontend**: Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS 4, shadcn/ui
+- **Backend**: Next.js API Routes (Serverless)
+- **Database**: PostgreSQL (via Supabase/Prisma)
+- **Storage**: Supabase Storage / Cloudflare R2
+- **Image Processing**: Sharp (server-side), Canvas API (client-side preview)
+- **Authentication**: Supabase Auth
+- **Validation**: Zod
+
+## 📋 Prerequisites
+
+- Node.js 18+ atau 20+
+- npm atau yarn
+- PostgreSQL database (Supabase recommended)
+- Supabase project untuk storage dan auth
+
+## 🔧 Setup Instructions
+
+### 1. Install Dependencies
+
+Proyek sudah berada di direktori root.
+
+```bash
+npm install
+```
+
+### 2. Setup Environment Variables
+
+Copy `.env.example` ke `.env.local` dan isi dengan kredensial Anda:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local`:
+
+```env
+DATABASE_URL="postgresql://user:password@localhost:5432/poster_composer"
+NEXT_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+SUPABASE_BUCKET="posters"
+```
+
+### 3. Setup Database dengan Prisma
+
+```bash
+# Generate Prisma Client
+npx prisma generate
+
+# Push schema ke database (development)
+npx prisma db push
+
+# Atau jalankan migration (production)
+npx prisma migrate dev --name init
+```
+
+### 4. Setup Supabase Storage
+
+1. Buat bucket baru di Supabase Dashboard: `posters`
+2. Set bucket sebagai **public** (untuk akses URL hasil)
+3. (Optional) Setup RLS policies sesuai kebutuhan
+
+### 5. Run Development Server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Buka [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📁 Project Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+poster-composer/
+├── app/
+│   ├── api/              # API Routes
+│   │   ├── upload/       # Upload poster & assets
+│   │   ├── presets/      # Preset CRUD
+│   │   ├── render/       # Render engine endpoint
+│   │   ├── batch/        # Batch processing
+│   │   ├── brands/       # Brand management
+│   │   └── outputs/      # Output results
+│   ├── dashboard/        # Admin dashboard UI
+│   └── page.tsx          # Landing page
+├── lib/
+│   ├── prisma.ts         # Prisma client
+│   ├── supabaseClient.ts # Supabase helpers
+│   ├── presetSchema.ts   # Zod validation schemas
+│   ├── coverContain.ts   # Image positioning algorithms
+│   ├── tileWatermark.ts  # Watermark tiling logic
+│   └── utils.ts          # Utility functions
+├── components/
+│   └── ui/               # shadcn/ui components
+├── prisma/
+│   └── schema.prisma     # Database schema
+├── assets/               # Default assets (bg, wm, logo)
+└── public/               # Static files
+```
 
-## Learn More
+## 🎨 Usage
 
-To learn more about Next.js, take a look at the following resources:
+### 1. Create a Brand
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```typescript
+// POST /api/brands
+{
+  "name": "Loker Tuban",
+  "slug": "loker-tuban",
+  "ownerUserId": "user-uuid"
+}
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Upload Assets (Background, Watermark)
 
-## Deploy on Vercel
+```typescript
+// POST /api/upload
+FormData {
+  file: File,
+  type: "bg" | "wm" | "logo",
+  brand_id: "brand-uuid"
+}
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 3. Create Preset
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```typescript
+// POST /api/presets
+{
+  "brand_id": "brand-uuid",
+  "name": "Feed 3:4",
+  "is_default": true,
+  "settings": {
+    // See lib/presetSchema.ts for full schema
+  }
+}
+```
+
+### 4. Upload Poster & Render
+
+```typescript
+// POST /api/render
+{
+  "brand_id": "brand-uuid",
+  "preset_id": "preset-uuid",
+  "poster_url": "https://cdn.supabase.co/.../poster.jpg",
+  "size_tag": "3x4_1080x1440"
+}
+```
+
+## 🧪 Development Scripts
+
+```bash
+npm run dev          # Start dev server
+npm run build        # Build for production
+npm run start        # Start production server
+npm run lint         # Run ESLint
+
+# Prisma commands
+npx prisma studio    # Open Prisma Studio (DB GUI)
+npx prisma generate  # Generate Prisma Client
+npx prisma db push   # Push schema to database
+npx prisma migrate   # Create and run migrations
+```
+
+## 🔐 Authentication
+
+Default menggunakan Supabase Auth. Setup:
+
+1. Enable Email/Password authentication di Supabase Dashboard
+2. (Optional) Enable OAuth providers (Google, GitHub, dll)
+3. Configure redirect URLs: `http://localhost:3000/auth/callback`
+
+## 🚀 Deployment
+
+### Vercel (Recommended)
+
+1. Push ke GitHub
+2. Import project di Vercel Dashboard
+3. Set environment variables di Project Settings
+4. Deploy otomatis dari `main` branch
+
+### Database Setup for Production
+
+1. Use Supabase Postgres (recommended)
+2. Or setup your own PostgreSQL instance
+3. Run migrations: `npx prisma migrate deploy`
+
+## 📚 Documentation
+
+Lihat folder dokumen spesifikasi lengkap:
+- `01-architecture.md` - System architecture overview
+- `02-database-schema.md` - Database schema & models
+- `03-render-engine.md` - Render engine specifications
+- `04-frontend-ui-ux.md` - Frontend design guide
+- `05-preset-system.md` - Preset configuration system
+- `06-api-routes.md` - API endpoints documentation
+- `07-deployment-workflow.md` - Deployment guide
+
+## 🤝 Contributing
+
+This is a private project. For access, contact the project owner.
+
+## 📝 License
+
+Proprietary - All rights reserved
+
+## 🐛 Troubleshooting
+
+### Sharp Installation Issues
+
+```bash
+npm install --platform=win32 --arch=x64 sharp
+```
+
+### Prisma Client Not Found
+
+```bash
+npx prisma generate
+```
+
+### Supabase Connection Issues
+
+Check your environment variables and ensure:
+- Database URL is correct
+- Supabase keys are valid
+- Network allows connection to Supabase
+
+---
+
+**Built with ❤️ for efficient poster production**

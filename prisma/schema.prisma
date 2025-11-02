@@ -1,0 +1,154 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Brand {
+  id              String        @id @default(uuid())
+  name            String
+  slug            String        @unique
+  ownerUserId     String
+  defaultPresetId String?       @db.Uuid
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  assets          Asset[]
+  presets         Preset[]
+  projects        Project[]
+  posters         Poster[]
+  compositions    Composition[]
+  auditLogs       AuditLog[]
+
+  @@index([slug])
+  @@index([ownerUserId])
+}
+
+model Asset {
+  id        String    @id @default(uuid())
+  brandId   String
+  type      AssetType
+  fileUrl   String
+  meta      Json
+  createdBy String
+  createdAt DateTime  @default(now())
+  brand     Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([brandId, type])
+}
+
+enum AssetType {
+  bg
+  wm
+  logo
+}
+
+model Preset {
+  id           String        @id @default(uuid())
+  brandId      String
+  name         String
+  isDefault    Boolean       @default(false)
+  settings     Json
+  createdBy    String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  brand        Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  compositions Composition[]
+
+  @@unique([brandId, name])
+  @@index([brandId])
+}
+
+model Project {
+  id        String   @id @default(uuid())
+  brandId   String
+  title     String
+  notes     String?
+  createdBy String
+  createdAt DateTime @default(now())
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  posters   Poster[]
+
+  @@index([brandId])
+}
+
+model Poster {
+  id           String        @id @default(uuid())
+  brandId      String
+  projectId    String?
+  fileUrl      String
+  meta         Json
+  uploadedBy   String
+  createdAt    DateTime      @default(now())
+  brand        Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  compositions Composition[]
+
+  @@index([brandId, projectId])
+}
+
+model Composition {
+  id        String       @id @default(uuid())
+  brandId   String
+  posterId  String
+  presetId  String
+  overrides Json
+  status    RenderStatus @default(draft)
+  createdBy String
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  brand     Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  poster    Poster       @relation(fields: [posterId], references: [id], onDelete: Cascade)
+  preset    Preset       @relation(fields: [presetId], references: [id], onDelete: Restrict)
+  outputs   Output[]
+
+  @@index([posterId, presetId])
+  @@index([status])
+}
+
+enum RenderStatus {
+  draft
+  rendering
+  done
+  failed
+}
+
+model Output {
+  id            String       @id @default(uuid())
+  compositionId String
+  sizeTag       String
+  fileUrl       String
+  format        OutputFormat
+  checksum      String?
+  bytes         Int?
+  createdAt     DateTime     @default(now())
+  composition   Composition  @relation(fields: [compositionId], references: [id], onDelete: Cascade)
+
+  @@unique([compositionId, sizeTag])
+  @@index([compositionId])
+}
+
+enum OutputFormat {
+  png
+  jpg
+  pdf
+}
+
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  brandId   String
+  userId    String
+  action    String
+  subjectId String?
+  meta      Json?
+  createdAt DateTime @default(now())
+  brand     Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@index([brandId, createdAt])
+}
