@@ -121,3 +121,56 @@ export async function GET(
     );
   }
 }
+
+// DELETE - Delete template
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    // Check if preset exists
+    const { data: existingPreset, error: fetchError } = await supabaseAdmin
+      .from('presets')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchError || !existingPreset) {
+      return NextResponse.json(
+        {
+          status: 'error',
+          code: 'E_TEMPLATE_NOT_FOUND',
+          message: 'Template not found',
+        },
+        { status: 404 }
+      );
+    }
+
+    // Delete preset
+    const { error: deleteError } = await supabaseAdmin
+      .from('presets')
+      .delete()
+      .eq('id', id);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+
+    return NextResponse.json({
+      status: 'success',
+      message: 'Template deleted successfully',
+    });
+  } catch (error) {
+    console.error('DELETE /api/templates/[id] error:', error);
+    return NextResponse.json(
+      {
+        status: 'error',
+        code: 'E_DELETE_TEMPLATE',
+        message: 'Failed to delete template',
+      },
+      { status: 500 }
+    );
+  }
+}

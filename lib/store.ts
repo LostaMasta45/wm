@@ -62,6 +62,8 @@ interface PosterStore {
   setWatermarkOpacity: (opacity: number) => void;
   watermarkSize: number;
   setWatermarkSize: (size: number) => void;
+  borderRadius: number;
+  setBorderRadius: (radius: number) => void;
   showGrid: boolean;
   setShowGrid: (show: boolean) => void;
   aspectRatio: '3:4' | '4:5';
@@ -195,6 +197,7 @@ export const usePosterStore = create<PosterStore>()(
       padding: defaultTemplates[0].settings.padding,
       watermarkOpacity: defaultTemplates[0].settings.watermarkOpacity,
       watermarkSize: defaultTemplates[0].settings.watermarkSize,
+      borderRadius: 0,
       showGrid: false,
       aspectRatio: '3:4',
       exportedUrl: '',
@@ -475,6 +478,7 @@ export const usePosterStore = create<PosterStore>()(
       setPadding: (padding) => set({ padding }),
       setWatermarkOpacity: (opacity) => set({ watermarkOpacity: opacity }),
       setWatermarkSize: (size) => set({ watermarkSize: size }),
+      setBorderRadius: (radius) => set({ borderRadius: radius }),
       setShowGrid: (show) => set({ showGrid: show }),
       setAspectRatio: (ratio) => set({ aspectRatio: ratio }),
       setExportedUrl: (url) => set({ exportedUrl: url }),
@@ -596,6 +600,7 @@ export const usePosterStore = create<PosterStore>()(
           padding: template?.settings.padding || 5,
           watermarkOpacity: template?.settings.watermarkOpacity || 12,
           watermarkSize: template?.settings.watermarkSize || 30,
+          borderRadius: 0,
         });
       },
     }),
