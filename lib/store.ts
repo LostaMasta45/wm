@@ -54,6 +54,8 @@ interface PosterStore {
   // Images
   posterUrl: string;
   setPosterUrl: (url: string) => void;
+  dynamicBackgroundColor: string | null;
+  setDynamicBackgroundColor: (color: string | null) => void;
   
   // Settings
   padding: number;
@@ -112,17 +114,31 @@ interface PosterStore {
 // Default templates
 const defaultTemplates: Template[] = [
   {
+    id: 'dynamic-color',
+    name: '🎨 Dynamic Color',
+    brandSlug: 'dynamic',
+    thumbnail: '', // No thumbnail needed - will use gradient
+    backgroundUrl: '',
+    watermarkUrl: '',
+    settings: {
+      backgroundColor: '#DYNAMIC', // Special flag for dynamic color extraction
+      padding: 8,
+      watermarkOpacity: 0,
+      watermarkSize: 30,
+    },
+  },
+  {
     id: 'loker-tuban-primary',
     name: 'Loker Tuban',
     brandSlug: 'loker-tuban',
-    thumbnail: '/templates/loker-tuban-thumb.jpg',
-    backgroundUrl: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1080&h=1440&fit=crop',
-    watermarkUrl: 'https://images.unsplash.com/photo-1614680376739-414d95ff43df?w=400&h=400&fit=crop&sat=-100&opacity=20',
+    thumbnail: '', // Use gradient fallback
+    backgroundUrl: '', // No background image for now
+    watermarkUrl: '',
     settings: {
       padding: 5,
       watermarkOpacity: 12,
       watermarkSize: 30,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#FEF3C7', // Light yellow background instead of white
     },
     isFavorite: true,
     usageCount: 0,
@@ -131,14 +147,14 @@ const defaultTemplates: Template[] = [
     id: 'loker-jombang-primary',
     name: 'Loker Jombang',
     brandSlug: 'loker-jombang',
-    thumbnail: '/templates/loker-jombang-thumb.jpg',
-    backgroundUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1080&h=1440&fit=crop',
-    watermarkUrl: 'https://images.unsplash.com/photo-1614680376593-902f74cf0d41?w=400&h=400&fit=crop&sat=-100&opacity=20',
+    thumbnail: '', // Use gradient fallback
+    backgroundUrl: '', // No background image for now
+    watermarkUrl: '',
     settings: {
       padding: 8,
       watermarkOpacity: 15,
       watermarkSize: 30,
-      backgroundColor: '#FFFFFF',
+      backgroundColor: '#E0F2FE', // Light blue background instead of white
     },
     isFavorite: false,
     usageCount: 0,
@@ -147,14 +163,14 @@ const defaultTemplates: Template[] = [
     id: 'generic-modern',
     name: 'Modern Clean',
     brandSlug: 'generic',
-    thumbnail: '/templates/generic-thumb.jpg',
-    backgroundUrl: 'https://images.unsplash.com/photo-1557682250-33bd709cbe85?w=1080&h=1440&fit=crop',
-    watermarkUrl: 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=400&h=400&fit=crop&sat=-100&opacity=20',
+    thumbnail: '', // Use gradient fallback
+    backgroundUrl: '', // No background image for now
+    watermarkUrl: '',
     settings: {
       padding: 10,
       watermarkOpacity: 10,
       watermarkSize: 30,
-      backgroundColor: '#F8FAFC',
+      backgroundColor: '#F0FDF4', // Light green background
     },
     isFavorite: false,
     usageCount: 0,
@@ -190,10 +206,11 @@ const defaultAchievements: Record<string, Achievement> = {
 export const usePosterStore = create<PosterStore>()(
   persist(
     (set, get) => ({
-      // Initial state
+      // Initial state - ensure Dynamic Color template is always first
       templates: defaultTemplates,
-      selectedTemplate: defaultTemplates[0],
+      selectedTemplate: defaultTemplates[0], // Dynamic Color by default
       posterUrl: '',
+      dynamicBackgroundColor: null,
       padding: defaultTemplates[0].settings.padding,
       watermarkOpacity: defaultTemplates[0].settings.watermarkOpacity,
       watermarkSize: defaultTemplates[0].settings.watermarkSize,
@@ -254,6 +271,15 @@ export const usePosterStore = create<PosterStore>()(
           return { templates, selectedTemplate };
         });
 
+        // Check if this is a default template (don't sync to database)
+        const isDefaultTemplate = defaultTemplates.some(dt => dt.id === templateId);
+        
+        if (isDefaultTemplate) {
+          // Default templates (like Dynamic Color) - changes saved locally only
+          console.log(`Template "${template.name}" is a default template - changes saved locally`);
+          return; // Skip database sync
+        }
+        
         // Check if templateId is a UUID (from database)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(templateId);
         
@@ -330,7 +356,7 @@ export const usePosterStore = create<PosterStore>()(
                   id: preset.id,
                   name: preset.name,
                   brandSlug: 'loaded-from-db',
-                  thumbnail: '/templates/thumb.jpg',
+                  thumbnail: '', // Use gradient fallback
                   backgroundUrl: settings.backgroundUrl || '',
                   watermarkUrl: settings.watermarkUrl || '',
                   settings: {
@@ -344,13 +370,32 @@ export const usePosterStore = create<PosterStore>()(
                 };
               });
 
-              // Use loaded templates from database - DO NOT seed again
+              // ALWAYS include Dynamic Color template at the beginning
+              const dynamicColorTemplate = defaultTemplates.find(t => t.id === 'dynamic-color');
+              const hasDynamicColor = loadedTemplates.some(t => t.id === 'dynamic-color');
+              
+              let finalTemplates = loadedTemplates;
+              if (dynamicColorTemplate && !hasDynamicColor) {
+                // Add Dynamic Color as first template
+                finalTemplates = [dynamicColorTemplate, ...loadedTemplates];
+              } else if (hasDynamicColor) {
+                // Move Dynamic Color to first position
+                const dynamicTemplate = finalTemplates.find(t => t.id === 'dynamic-color');
+                const otherTemplates = finalTemplates.filter(t => t.id !== 'dynamic-color');
+                if (dynamicTemplate) {
+                  finalTemplates = [dynamicTemplate, ...otherTemplates];
+                }
+              }
+              
+              console.log('✅ Templates loaded:', finalTemplates.length, 'templates (Dynamic Color included)');
+
+              // Use final templates with Dynamic Color at the beginning
               set({ 
-                templates: loadedTemplates,
-                selectedTemplate: loadedTemplates[0] || null,
-                padding: loadedTemplates[0]?.settings.padding || 5,
-                watermarkOpacity: loadedTemplates[0]?.settings.watermarkOpacity || 12,
-                watermarkSize: loadedTemplates[0]?.settings.watermarkSize || 30,
+                templates: finalTemplates,
+                selectedTemplate: finalTemplates[0], // Dynamic Color first
+                padding: finalTemplates[0]?.settings.padding || 8,
+                watermarkOpacity: finalTemplates[0]?.settings.watermarkOpacity || 0,
+                watermarkSize: finalTemplates[0]?.settings.watermarkSize || 30,
               });
               return; // IMPORTANT: Exit here, don't seed
             }
@@ -359,19 +404,19 @@ export const usePosterStore = create<PosterStore>()(
             console.log('No templates in database, seeding defaults ONCE...');
             await get().seedDefaultTemplates();
           } else {
-            console.error('API error loading templates');
-            // Use default templates locally without seeding
+            console.error('API error loading templates - using defaults');
+            // Use default templates (Dynamic Color first)
             set({ 
               templates: defaultTemplates,
-              selectedTemplate: defaultTemplates[0] || null,
+              selectedTemplate: defaultTemplates[0], // Dynamic Color
             });
           }
         } catch (error) {
           console.error('Failed to load templates from database:', error);
-          // Use default templates locally without seeding
+          // Use default templates (Dynamic Color first)
           set({ 
             templates: defaultTemplates,
-            selectedTemplate: defaultTemplates[0] || null,
+            selectedTemplate: defaultTemplates[0], // Dynamic Color
           });
         }
       },
@@ -482,6 +527,7 @@ export const usePosterStore = create<PosterStore>()(
       setShowGrid: (show) => set({ showGrid: show }),
       setAspectRatio: (ratio) => set({ aspectRatio: ratio }),
       setExportedUrl: (url) => set({ exportedUrl: url }),
+      setDynamicBackgroundColor: (color) => set({ dynamicBackgroundColor: color }),
       
       // Export actions
       addRecentExport: (export_) => {
@@ -601,6 +647,7 @@ export const usePosterStore = create<PosterStore>()(
           watermarkOpacity: template?.settings.watermarkOpacity || 12,
           watermarkSize: template?.settings.watermarkSize || 30,
           borderRadius: 0,
+          dynamicBackgroundColor: null,
         });
       },
     }),

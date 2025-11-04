@@ -3,13 +3,33 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePosterStore } from '@/lib/store';
 import { toast, Toaster } from 'sonner';
-import { Download, Upload, Sparkles, Check, X, Sun, Moon, Settings, History, ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { Download, Upload, Sparkles, Check, X, Sun, Moon, Settings, History, ArrowLeft, Plus, Trash2, Palette } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 import TemplateSettingsModal from './TemplateSettingsModal';
 import AddTemplateModal from './AddTemplateModal';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import { extractColorsFromImage } from '@/lib/colorExtractor';
 import SliderWithInput from './SliderWithInput';
+
+// Helper function to generate unique gradient for each template
+const getTemplateGradient = (templateId: string, templateName: string) => {
+  // Hash template id to generate consistent gradient
+  const hash = templateId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  
+  const gradients = [
+    'from-blue-500 via-cyan-500 to-teal-500',
+    'from-purple-500 via-pink-500 to-red-500',
+    'from-green-500 via-emerald-500 to-cyan-500',
+    'from-orange-500 via-red-500 to-pink-500',
+    'from-indigo-500 via-purple-500 to-pink-500',
+    'from-yellow-500 via-orange-500 to-red-500',
+    'from-teal-500 via-blue-500 to-indigo-500',
+    'from-pink-500 via-purple-500 to-indigo-500',
+  ];
+  
+  return gradients[hash % gradients.length];
+};
 
 export default function PosterComposerJobMate() {
   const {
@@ -26,6 +46,8 @@ export default function PosterComposerJobMate() {
     setWatermarkSize,
     borderRadius,
     setBorderRadius,
+    dynamicBackgroundColor,
+    setDynamicBackgroundColor,
     addRecentExport,
     updateTemplate,
     reset,
@@ -101,7 +123,18 @@ export default function PosterComposerJobMate() {
 
         setBatchFiles(batchItems);
         setBatchMode(true);
-        setPosterUrl(batchItems[0].url); // Preview first image
+        
+        const firstImageUrl = batchItems[0].url;
+        setPosterUrl(firstImageUrl);
+        
+        // Extract color if template uses dynamic color
+        if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
+          toast.loading('Extracting colors...', { id: 'color-extract' });
+          const colors = await extractColorsFromImage(firstImageUrl);
+          setDynamicBackgroundColor(colors.dominant);
+          toast.success('Colors extracted! 🎨', { id: 'color-extract' });
+        }
+        
         toast.success(`${validFiles.length} gambar berhasil di-upload! 🎉`);
       } else {
         // Single mode
@@ -114,6 +147,20 @@ export default function PosterComposerJobMate() {
         setPosterUrl(localUrl);
         setBatchMode(false);
         setBatchFiles([]);
+        
+        // Extract color if template uses dynamic color
+        if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
+          toast.loading('Extracting colors...', { id: 'color-extract' });
+          try {
+            const colors = await extractColorsFromImage(localUrl);
+            setDynamicBackgroundColor(colors.dominant);
+            toast.success('Colors extracted! 🎨', { id: 'color-extract' });
+          } catch (error) {
+            console.error('Color extraction error:', error);
+            toast.error('Failed to extract color', { id: 'color-extract' });
+          }
+        }
+        
         toast.success('Poster berhasil di-upload! 🎉');
       }
     } catch (error) {
@@ -174,8 +221,11 @@ export default function PosterComposerJobMate() {
 
     const render = async () => {
       try {
-        // Background color
-        ctx.fillStyle = selectedTemplate.settings.backgroundColor || '#FFFFFF';
+        // Background color - use dynamic if available
+        const bgColor = selectedTemplate.settings.backgroundColor === '#DYNAMIC' && dynamicBackgroundColor
+          ? dynamicBackgroundColor
+          : selectedTemplate.settings.backgroundColor || '#FFFFFF';
+        ctx.fillStyle = bgColor;
         ctx.fillRect(0, 0, width, height);
 
         // Background image
@@ -302,7 +352,7 @@ export default function PosterComposerJobMate() {
     };
 
     render();
-  }, [selectedTemplate, posterUrl, padding, watermarkOpacity, watermarkSize, borderRadius, aspectRatio]);
+  }, [selectedTemplate, posterUrl, padding, watermarkOpacity, watermarkSize, borderRadius, aspectRatio, dynamicBackgroundColor]);
 
   // Handle template settings
   const handleOpenSettings = (e: React.MouseEvent, template: typeof templates[0]) => {
@@ -365,6 +415,23 @@ export default function PosterComposerJobMate() {
   useEffect(() => {
     if (!selectedTemplate || !mounted) return;
 
+    // Skip auto-save for default templates (like Dynamic Color)
+    const isDefaultTemplate = ['dynamic-color', 'loker-tuban-primary', 'loker-jombang-primary', 'generic-modern'].includes(selectedTemplate.id);
+    
+    if (isDefaultTemplate) {
+      // Default templates - settings saved locally only via zustand persist
+      setIsSaving(false);
+      return;
+    }
+
+    // Only auto-save for database templates (UUID format)
+    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedTemplate.id);
+    
+    if (!isUUID) {
+      setIsSaving(false);
+      return;
+    }
+
     setIsSaving(true);
     const saveTimer = setTimeout(async () => {
       try {
@@ -423,8 +490,11 @@ export default function PosterComposerJobMate() {
 
       // Render in HD
       await (async () => {
-        // Background color
-        hdCtx.fillStyle = selectedTemplate?.settings.backgroundColor || '#FFFFFF';
+        // Background color - use dynamic if available
+        const bgColor = selectedTemplate?.settings.backgroundColor === '#DYNAMIC' && dynamicBackgroundColor
+          ? dynamicBackgroundColor
+          : selectedTemplate?.settings.backgroundColor || '#FFFFFF';
+        hdCtx.fillStyle = bgColor;
         hdCtx.fillRect(0, 0, hdWidth, hdHeight);
 
         // Background image
@@ -594,8 +664,11 @@ export default function PosterComposerJobMate() {
         hdCanvas.width = width;
         hdCanvas.height = height;
 
-        // Background color
-        hdCtx.fillStyle = selectedTemplate?.settings.backgroundColor || '#FFFFFF';
+        // Background color - use dynamic if available
+        const bgColor = selectedTemplate?.settings.backgroundColor === '#DYNAMIC' && dynamicBackgroundColor
+          ? dynamicBackgroundColor
+          : selectedTemplate?.settings.backgroundColor || '#FFFFFF';
+        hdCtx.fillStyle = bgColor;
         hdCtx.fillRect(0, 0, width, height);
 
         // Background image
@@ -921,14 +994,35 @@ export default function PosterComposerJobMate() {
                     `}
                   >
                     {/* Template Preview */}
-                    <div className="aspect-[3/4] bg-muted relative">
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="text-3xl sm:text-4xl">🎨</div>
-                      </div>
+                    <div className="aspect-[3/4] relative overflow-hidden">
+                      {/* Dynamic Color Template - Special Gradient */}
+                      {template.settings.backgroundColor === '#DYNAMIC' ? (
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 flex items-center justify-center">
+                          <div className="relative">
+                            <div className="absolute inset-0 bg-white/10 blur-xl animate-pulse" />
+                            <Palette className="w-8 h-8 sm:w-10 sm:h-10 text-white relative z-10" strokeWidth={2.5} />
+                          </div>
+                        </div>
+                      ) : template.thumbnail ? (
+                        <img
+                          src={template.thumbnail}
+                          alt={template.name}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className={`absolute inset-0 bg-gradient-to-br ${getTemplateGradient(template.id, template.name)} flex items-center justify-center`}>
+                          <div className="relative">
+                            <div className="absolute inset-0 bg-white/10 blur-xl" />
+                            <div className="relative z-10 text-white font-black text-3xl sm:text-4xl drop-shadow-lg">
+                              {template.name.charAt(0)}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Selected Badge */}
                       {selectedTemplate?.id === template.id && (
-                        <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary flex items-center justify-center">
+                        <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-primary flex items-center justify-center shadow-lg">
                           <Check className="w-3 h-3 sm:w-4 sm:h-4 text-primary-foreground" />
                         </div>
                       )}
@@ -1118,6 +1212,25 @@ export default function PosterComposerJobMate() {
                           1080×{aspectRatio === '3:4' ? '1440' : '1350'}
                         </div>
                       </div>
+
+                      {/* Dynamic Color Badge */}
+                      {selectedTemplate?.settings.backgroundColor === '#DYNAMIC' && dynamicBackgroundColor && (
+                        <div className="w-full p-3 bg-gradient-to-r from-primary/10 to-accent/10 border-2 border-primary/20 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 flex-1">
+                              <Palette className="w-4 h-4 text-primary" />
+                              <span className="text-xs font-bold text-foreground">Dynamic Color Active</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-8 h-8 rounded-lg border-2 border-white dark:border-black shadow-lg"
+                                style={{ backgroundColor: dynamicBackgroundColor }}
+                              />
+                              <span className="text-xs font-mono text-muted-foreground">{dynamicBackgroundColor}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Change Button */}
                       <button

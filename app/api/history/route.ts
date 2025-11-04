@@ -9,26 +9,43 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
-    const { data, error, count } = await supabaseAdmin
+    // For homepage preview (limit=6), only fetch essential fields
+    const isPreview = limit <= 6;
+    
+    const query = supabaseAdmin
       .from('poster_history')
-      .select('*', { count: 'exact' })
+      .select(
+        isPreview 
+          ? 'id, template_id, template_name, brand_slug, thumbnail_url, poster_url, settings, created_at'
+          : '*',
+        { count: 'exact' }
+      )
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
 
     if (error) {
       console.error('Supabase error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({
-      data: data || [],
-      pagination: {
-        page,
-        limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit),
+    // Add cache headers for better performance
+    const headers = new Headers();
+    headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
+    
+    return NextResponse.json(
+      {
+        data: data || [],
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+        },
       },
-    });
+      { headers }
+    );
   } catch (error: any) {
     console.error('Get history error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
