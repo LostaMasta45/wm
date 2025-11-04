@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePosterStore } from '@/lib/store';
 import { toast, Toaster } from 'sonner';
-import { Download, Upload, Sparkles, Check, X, Sun, Moon, Settings, History, ArrowLeft, Plus, Trash2, Palette } from 'lucide-react';
+import { Download, Upload, Sparkles, Check, X, Sun, Moon, Settings, History, ArrowLeft, Plus, Trash2, Palette, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 import TemplateSettingsModal from './TemplateSettingsModal';
@@ -374,6 +374,24 @@ export default function PosterComposerJobMate() {
     e.stopPropagation();
     setTemplateToDelete(template);
     setDeleteDialogOpen(true);
+  };
+
+  // Handle save settings
+  const handleSaveSettings = () => {
+    if (!selectedTemplate) return;
+
+    // Update template with current settings
+    updateTemplate(selectedTemplate.id, {
+      settings: {
+        padding,
+        watermarkOpacity,
+        watermarkSize,
+        backgroundColor: selectedTemplate.settings.backgroundColor,
+        borderRadius,
+      },
+    });
+
+    toast.success(`Settings saved for ${selectedTemplate.name}! 🎉`);
   };
 
   const handleDeleteTemplate = async () => {
@@ -958,13 +976,22 @@ export default function PosterComposerJobMate() {
 
             {/* Template Cards - Horizontal Scroll */}
             <div className="relative -mx-4 md:mx-0">
-              <div className="flex gap-2 sm:gap-2.5 md:gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide px-4 md:px-0">
+              {/* Scroll hint for mobile */}
+              <div className="md:hidden absolute right-0 top-0 bottom-0 w-12 bg-gradient-to-l from-background to-transparent pointer-events-none z-10" />
+              
+              <div 
+                className="flex gap-3 md:gap-3 overflow-x-auto pb-3 snap-x snap-mandatory px-4 md:px-0 scrollbar-thin scrollbar-thumb-primary/30 scrollbar-track-transparent hover:scrollbar-thumb-primary/50 transition-colors"
+                style={{
+                  scrollbarWidth: 'thin',
+                  WebkitOverflowScrolling: 'touch'
+                }}
+              >
                 {/* Add Template Button */}
                 <motion.button
                   onClick={() => setAddTemplateModalOpen(true)}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="relative flex-shrink-0 w-[120px] sm:w-[140px] md:w-[160px] lg:w-[180px] rounded-lg overflow-hidden snap-start cursor-pointer border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-primary dark:hover:border-primary transition-all group"
+                  className="relative flex-shrink-0 w-[140px] sm:w-[160px] md:w-[180px] rounded-lg overflow-hidden snap-start cursor-pointer border-2 border-dashed border-border hover:border-primary transition-all group touch-manipulation"
                 >
                   <div className="aspect-[3/4] bg-muted relative flex flex-col items-center justify-center gap-2">
                     <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center group-hover:bg-primary/20 dark:group-hover:bg-primary/30 transition-colors">
@@ -979,14 +1006,21 @@ export default function PosterComposerJobMate() {
                 {templates.map((template, index) => (
                   <motion.div
                     key={template.id}
-                    onClick={() => setSelectedTemplate(template)}
+                    onClick={() => {
+                      setSelectedTemplate(template);
+                      // Load template settings
+                      setPadding(template.settings.padding || 8);
+                      setWatermarkOpacity(template.settings.watermarkOpacity || 0);
+                      setWatermarkSize(template.settings.watermarkSize || 30);
+                      setBorderRadius(template.settings.borderRadius || 0);
+                    }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     initial={{ opacity: 0, x: 10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
                     className={`
-                      relative flex-shrink-0 w-[120px] sm:w-[140px] md:w-[160px] lg:w-[180px] rounded-lg overflow-hidden snap-start cursor-pointer border-2 transition-all
+                      relative flex-shrink-0 w-[140px] sm:w-[160px] md:w-[180px] rounded-lg overflow-hidden snap-start cursor-pointer border-2 transition-all touch-manipulation
                       ${selectedTemplate?.id === template.id
                         ? 'border-primary shadow-lg shadow-primary/20'
                         : 'border-border hover:border-primary/50'
@@ -1030,16 +1064,16 @@ export default function PosterComposerJobMate() {
 
                     {/* Template Info */}
                     <div className={`
-                      p-1.5 sm:p-2 md:p-2.5 transition-colors
+                      p-2 sm:p-2.5 transition-colors
                       ${selectedTemplate?.id === template.id
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-card text-card-foreground'
                       }
                     `}>
-                      <div className="flex items-center justify-between gap-1 sm:gap-1.5">
+                      <div className="flex items-center justify-between gap-1.5">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-[11px] sm:text-xs md:text-sm truncate">{template.name}</h3>
-                          <p className={`text-[9px] sm:text-[10px] truncate ${
+                          <h3 className="font-semibold text-xs sm:text-sm truncate">{template.name}</h3>
+                          <p className={`text-[10px] sm:text-xs truncate ${
                             selectedTemplate?.id === template.id
                               ? 'text-primary-foreground/70'
                               : 'text-muted-foreground'
@@ -1048,8 +1082,8 @@ export default function PosterComposerJobMate() {
                           </p>
                         </div>
                         
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-0.5 sm:gap-1">
+                        {/* Action Buttons - Touch Friendly */}
+                        <div className="flex items-center gap-1">
                           {/* Edit Button */}
                           <button
                             onClick={(e) => handleOpenSettings(e, template)}
@@ -1328,6 +1362,20 @@ export default function PosterComposerJobMate() {
                           minLabel="0px"
                           maxLabel="100px"
                         />
+
+                        {/* Save Settings Button */}
+                        <button
+                          onClick={handleSaveSettings}
+                          disabled={!selectedTemplate}
+                          className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-lg font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 touch-manipulation"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>Save Settings for {selectedTemplate?.name || 'Template'}</span>
+                        </button>
+                        
+                        <p className="text-xs text-muted-foreground text-center">
+                          Settings will be remembered for this template
+                        </p>
                       </div>
                     </div>
                   </div>

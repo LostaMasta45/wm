@@ -14,6 +14,7 @@ export type Template = {
     watermarkOpacity: number;
     watermarkSize: number;
     backgroundColor: string;
+    borderRadius?: number; // Corner radius for poster
   };
   isFavorite?: boolean;
   usageCount?: number;
