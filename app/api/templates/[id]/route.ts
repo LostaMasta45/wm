@@ -39,6 +39,7 @@ export async function PATCH(
       ...(settings?.watermarkOpacity !== undefined && { watermarkOpacity: settings.watermarkOpacity }),
       ...(settings?.watermarkSize !== undefined && { watermarkSize: settings.watermarkSize }),
       ...(settings?.backgroundColor !== undefined && { backgroundColor: settings.backgroundColor }),
+      ...(settings?.borderRadius !== undefined && { borderRadius: settings.borderRadius }),
     };
 
     // Update preset

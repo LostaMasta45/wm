@@ -3,12 +3,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { usePosterStore } from '@/lib/store';
 import { toast, Toaster } from 'sonner';
-import { Download, Upload, Sparkles, Check, X, Sun, Moon, Settings, History, ArrowLeft, Plus, Trash2, Palette, Save } from 'lucide-react';
+import { Download, Upload, Sparkles, Check, X, Sun, Moon, Settings, History, ArrowLeft, Plus, Trash2, Palette, Save, Crop } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
 import TemplateSettingsModal from './TemplateSettingsModal';
 import AddTemplateModal from './AddTemplateModal';
 import DeleteConfirmDialog from './DeleteConfirmDialog';
+import CropModal from './CropModal';
 import { extractColorsFromImage } from '@/lib/colorExtractor';
 import SliderWithInput from './SliderWithInput';
 
@@ -66,6 +67,10 @@ export default function PosterComposerJobMate() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [templateToDelete, setTemplateToDelete] = useState<typeof templates[0] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Crop modal states
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string>('');
   
   // Batch upload states
   const [batchMode, setBatchMode] = useState(false);
@@ -380,18 +385,50 @@ export default function PosterComposerJobMate() {
   const handleSaveSettings = () => {
     if (!selectedTemplate) return;
 
+    const newSettings = {
+      padding,
+      watermarkOpacity,
+      watermarkSize,
+      backgroundColor: selectedTemplate.settings.backgroundColor,
+      borderRadius,
+    };
+
+    console.log('💾 Saving settings for', selectedTemplate.name, ':', newSettings);
+
     // Update template with current settings
     updateTemplate(selectedTemplate.id, {
-      settings: {
-        padding,
-        watermarkOpacity,
-        watermarkSize,
-        backgroundColor: selectedTemplate.settings.backgroundColor,
-        borderRadius,
-      },
+      settings: newSettings,
     });
 
-    toast.success(`Settings saved for ${selectedTemplate.name}! 🎉`);
+    // Force verify after save
+    setTimeout(() => {
+      const store = usePosterStore.getState();
+      const updatedTemplate = store.templates.find(t => t.id === selectedTemplate.id);
+      console.log('✅ Verified saved settings:', updatedTemplate?.settings);
+      
+      // Verify localStorage
+      try {
+        const stored = localStorage.getItem('poster-composer-storage');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const storedTemplate = parsed.state?.templates?.find((t: any) => t.id === selectedTemplate.id);
+          console.log('✅ localStorage verification:', storedTemplate?.settings);
+        }
+      } catch (e) {
+        console.error('❌ Failed to verify localStorage:', e);
+      }
+    }, 200);
+
+    toast.success(`Settings saved for ${selectedTemplate.name}! 🎉`, {
+      description: 'Will persist after refresh',
+      duration: 3000,
+    });
+  };
+
+  // Handle crop complete
+  const handleCropComplete = (croppedImageUrl: string) => {
+    setPosterUrl(croppedImageUrl);
+    toast.success('Poster cropped successfully! ✂️');
   };
 
   const handleDeleteTemplate = async () => {
@@ -905,6 +942,13 @@ export default function PosterComposerJobMate() {
         }}
       />
 
+      <CropModal
+        isOpen={cropModalOpen}
+        onClose={() => setCropModalOpen(false)}
+        onCropComplete={handleCropComplete}
+        imageUrl={imageToCrop}
+      />
+
       <DeleteConfirmDialog
         isOpen={deleteDialogOpen}
         onClose={() => {
@@ -1008,11 +1052,13 @@ export default function PosterComposerJobMate() {
                     key={template.id}
                     onClick={() => {
                       setSelectedTemplate(template);
-                      // Load template settings
-                      setPadding(template.settings.padding || 8);
-                      setWatermarkOpacity(template.settings.watermarkOpacity || 0);
-                      setWatermarkSize(template.settings.watermarkSize || 30);
-                      setBorderRadius(template.settings.borderRadius || 0);
+                      // Load template settings (with explicit fallbacks)
+                      const settings = template.settings;
+                      setPadding(settings.padding ?? 8);
+                      setWatermarkOpacity(settings.watermarkOpacity ?? 0);
+                      setWatermarkSize(settings.watermarkSize ?? 30);
+                      setBorderRadius(settings.borderRadius ?? 0);
+                      console.log('Template loaded:', template.name, 'Settings:', settings);
                     }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
@@ -1245,6 +1291,33 @@ export default function PosterComposerJobMate() {
                         <div className="absolute top-2 right-2 sm:top-3 sm:right-3 px-2 py-1 sm:px-3 sm:py-1.5 bg-primary backdrop-blur-sm rounded text-primary-foreground text-[10px] sm:text-xs font-mono">
                           1080×{aspectRatio === '3:4' ? '1440' : '1350'}
                         </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setImageToCrop(posterUrl);
+                            setCropModalOpen(true);
+                          }}
+                          className="flex-1 px-3 py-2 bg-accent hover:bg-accent/80 text-foreground rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 touch-manipulation"
+                        >
+                          <Crop className="w-4 h-4" />
+                          <span>Crop</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPosterUrl('');
+                            setDynamicBackgroundColor(null);
+                            if (fileInputRef.current) {
+                              fileInputRef.current.value = '';
+                            }
+                          }}
+                          className="flex-1 px-3 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 touch-manipulation"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Remove</span>
+                        </button>
                       </div>
 
                       {/* Dynamic Color Badge */}

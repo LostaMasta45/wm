@@ -212,7 +212,7 @@ export const usePosterStore = create<PosterStore>()(
       selectedTemplate: defaultTemplates[0], // Dynamic Color by default
       posterUrl: '',
       dynamicBackgroundColor: null,
-      padding: defaultTemplates[0].settings.padding,
+      padding: defaultTemplates[0].settings.padding ?? 8,
       watermarkOpacity: defaultTemplates[0].settings.watermarkOpacity,
       watermarkSize: defaultTemplates[0].settings.watermarkSize,
       borderRadius: 0,
@@ -236,6 +236,7 @@ export const usePosterStore = create<PosterStore>()(
             padding: template.settings.padding,
             watermarkOpacity: template.settings.watermarkOpacity,
             watermarkSize: template.settings.watermarkSize,
+            borderRadius: template.settings.borderRadius || 0,
           });
           
           get().addActivity({
@@ -269,16 +270,53 @@ export const usePosterStore = create<PosterStore>()(
             ? { ...state.selectedTemplate, ...updates }
             : state.selectedTemplate;
           
-          return { templates, selectedTemplate };
+          // Also update current settings if this is the selected template
+          const newState: any = { templates, selectedTemplate };
+          
+          if (state.selectedTemplate?.id === templateId && updates.settings) {
+            // Update current working settings
+            if (updates.settings.padding !== undefined) newState.padding = updates.settings.padding;
+            if (updates.settings.watermarkOpacity !== undefined) newState.watermarkOpacity = updates.settings.watermarkOpacity;
+            if (updates.settings.watermarkSize !== undefined) newState.watermarkSize = updates.settings.watermarkSize;
+            if (updates.settings.borderRadius !== undefined) newState.borderRadius = updates.settings.borderRadius;
+          }
+          
+          return newState;
         });
 
-        // Check if this is a default template (don't sync to database)
+        // Check if this is a default template
         const isDefaultTemplate = defaultTemplates.some(dt => dt.id === templateId);
         
         if (isDefaultTemplate) {
-          // Default templates (like Dynamic Color) - changes saved locally only
-          console.log(`Template "${template.name}" is a default template - changes saved locally`);
-          return; // Skip database sync
+          // Default templates - create/update in database to persist settings
+          console.log(`Template "${template.name}" is a default template - syncing to database...`);
+          
+          try {
+            const updatedTemplate = { ...template, ...updates };
+            
+            // Try to create or update in database
+            const response = await fetch('/api/templates', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: updatedTemplate.name,
+                brandSlug: updatedTemplate.brandSlug,
+                backgroundUrl: updatedTemplate.backgroundUrl || '',
+                watermarkUrl: updatedTemplate.watermarkUrl || '',
+                settings: updatedTemplate.settings,
+              }),
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+              if (result.data) {
+                console.log(`✅ Template "${template.name}" synced to Supabase with UUID: ${result.data.id}`);
+              }
+            }
+          } catch (error) {
+            console.error('❌ Failed to sync default template to database:', error);
+          }
+          return; // Exit after handling default template
         }
         
         // Check if templateId is a UUID (from database)
@@ -365,6 +403,7 @@ export const usePosterStore = create<PosterStore>()(
                     watermarkOpacity: settings.watermarkOpacity || 12,
                     watermarkSize: settings.watermarkSize || 30,
                     backgroundColor: settings.backgroundColor || '#FFFFFF',
+                    borderRadius: settings.borderRadius || 0,
                   },
                   isFavorite: false,
                   usageCount: 0,
@@ -397,6 +436,7 @@ export const usePosterStore = create<PosterStore>()(
                 padding: finalTemplates[0]?.settings.padding || 8,
                 watermarkOpacity: finalTemplates[0]?.settings.watermarkOpacity || 0,
                 watermarkSize: finalTemplates[0]?.settings.watermarkSize || 30,
+                borderRadius: finalTemplates[0]?.settings.borderRadius || 0,
               });
               return; // IMPORTANT: Exit here, don't seed
             }
@@ -654,8 +694,15 @@ export const usePosterStore = create<PosterStore>()(
     }),
     {
       name: 'poster-composer-storage',
+      version: 2,
       partialize: (state) => ({
-        // Don't persist templates - always load from database
+        // ✅ NOW: Persist templates to save settings changes!
+        templates: state.templates,
+        selectedTemplate: state.selectedTemplate,
+        padding: state.padding,
+        watermarkOpacity: state.watermarkOpacity,
+        watermarkSize: state.watermarkSize,
+        borderRadius: state.borderRadius,
         recentExports: state.recentExports,
         activities: state.activities,
         achievements: state.achievements,
@@ -664,6 +711,30 @@ export const usePosterStore = create<PosterStore>()(
           templatesUsedSet: Array.from(state.stats.templatesUsedSet),
         },
       }),
+      migrate: (persistedState: any, version: number) => {
+        // Handle migration from older versions
+        if (version < 2) {
+          // Reset to defaults if migrating from version < 2
+          return {
+            templates: defaultTemplates,
+            selectedTemplate: defaultTemplates[0],
+            padding: defaultTemplates[0].settings.padding,
+            watermarkOpacity: defaultTemplates[0].settings.watermarkOpacity,
+            watermarkSize: defaultTemplates[0].settings.watermarkSize,
+            borderRadius: 0,
+            recentExports: [],
+            activities: [],
+            achievements: defaultAchievements,
+            stats: {
+              postersCreated: 0,
+              templatesUsedSet: [],
+              aiUsageCount: 0,
+            },
+          };
+        }
+        // For current version, return persisted state as-is
+        return persistedState;
+      },
       onRehydrateStorage: () => (state) => {
         if (state && Array.isArray(state.stats.templatesUsedSet)) {
           state.stats.templatesUsedSet = new Set(state.stats.templatesUsedSet);
