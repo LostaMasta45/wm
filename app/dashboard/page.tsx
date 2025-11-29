@@ -1,4 +1,4 @@
-import PosterComposerJobMate from './components/PosterComposerJobMate';
+import PosterComposer from './components/PosterComposer';
 
 export const metadata = {
   title: 'Dashboard | Poster Composer',  
@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function DashboardPage() {
-  return <PosterComposerJobMate />;
+  return <PosterComposer />;
 }
