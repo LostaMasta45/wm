@@ -6,7 +6,7 @@ import { toast, Toaster } from 'sonner';
 import { Sun, Moon, History, Layers, Undo2, Redo2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { extractColorsFromImage } from '@/lib/colorExtractor';
-import { compressImage, formatFileSize } from '@/lib/imageCompressor';
+
 import { useImageCache, useKeyboardShortcuts, useBatchExport, useUndoRedo, renderHDCanvas, RenderSettings } from './hooks';
 import TemplateSelector from './TemplateSelector';
 import PreviewCanvas from './PreviewCanvas';
@@ -191,31 +191,8 @@ export default function PosterComposer() {
     setIsUploading(true);
 
     try {
-      // Compress large images (> 2MB)
-      let processedFile = file;
-      const originalSize = file.size;
-      
-      if (file.size > 2 * 1024 * 1024) {
-        toast.loading('Compressing image...', { id: 'compress' });
-        try {
-          processedFile = await compressImage(file, {
-            maxWidth: 2400,
-            maxHeight: 3200,
-            quality: 0.9,
-          });
-          const savedSize = originalSize - processedFile.size;
-          if (savedSize > 0) {
-            toast.success(`Compressed! Saved ${formatFileSize(savedSize)}`, { id: 'compress' });
-          } else {
-            toast.dismiss('compress');
-          }
-        } catch (err) {
-          console.warn('Compression failed, using original:', err);
-          toast.dismiss('compress');
-        }
-      }
-
-      const localUrl = URL.createObjectURL(processedFile);
+      // Use original file without compression to maintain HD quality
+      const localUrl = URL.createObjectURL(file);
       setPosterUrl(localUrl);
       
       if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
@@ -250,46 +227,118 @@ export default function PosterComposer() {
     }
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
     
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      if (batchMode && e.dataTransfer.files.length > 1) {
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+      if (files.length === 0) return;
+
+      if (batchMode) {
         // Batch mode: add all files
-        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-        if (files.length > 0) {
-          addBatchFiles(files);
-          setPosterUrl(URL.createObjectURL(files[0]));
+        const newItems = addBatchFiles(files);
+        
+        // If no poster is currently showing, show the first new one
+        if (!posterUrl && newItems.length > 0) {
+          setPosterUrl(newItems[0].url);
           setCurrentBatchIndex(0);
-          toast.success(`Added ${files.length} files to batch`);
+          
+          // Extract color if needed
+          if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
+            try {
+              const colors = await extractColorsFromImage(newItems[0].url);
+              setDynamicBackgroundColor(colors.dominant);
+            } catch (error) {
+              console.error('Color extraction error:', error);
+            }
+          }
         }
+        
+        toast.success(`Added ${files.length} files to batch`);
+      } else if (files.length > 1) {
+        // Auto-enable batch mode
+        setBatchMode(true);
+        const newItems = addBatchFiles(files);
+        
+        if (newItems.length > 0) {
+          setPosterUrl(newItems[0].url);
+          setCurrentBatchIndex(0);
+          
+          // Extract color if needed
+          if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
+            try {
+              const colors = await extractColorsFromImage(newItems[0].url);
+              setDynamicBackgroundColor(colors.dominant);
+            } catch (error) {
+              console.error('Color extraction error:', error);
+            }
+          }
+        }
+        
+        toast.success(`Batch mode activated with ${files.length} files`);
       } else {
         // Single file mode
-        handleFileSelect(e.dataTransfer.files[0]);
+        handleFileSelect(files[0]);
       }
     }
-  }, [handleFileSelect, batchMode, addBatchFiles, setPosterUrl]);
+  }, [handleFileSelect, batchMode, addBatchFiles, posterUrl, setPosterUrl, selectedTemplate, setDynamicBackgroundColor]);
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     if (e.target.files && e.target.files.length > 0) {
-      if (batchMode && e.target.files.length > 1) {
+      const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+      if (files.length === 0) return;
+
+      if (batchMode) {
         // Batch mode: add all files
-        const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
-        if (files.length > 0) {
-          addBatchFiles(files);
-          setPosterUrl(URL.createObjectURL(files[0]));
+        const newItems = addBatchFiles(files);
+        
+        // If no poster is currently showing, show the first new one
+        if (!posterUrl && newItems.length > 0) {
+          setPosterUrl(newItems[0].url);
           setCurrentBatchIndex(0);
-          toast.success(`Added ${files.length} files to batch`);
+          
+          // Extract color if needed
+          if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
+            try {
+              const colors = await extractColorsFromImage(newItems[0].url);
+              setDynamicBackgroundColor(colors.dominant);
+            } catch (error) {
+              console.error('Color extraction error:', error);
+            }
+          }
         }
+        
+        toast.success(`Added ${files.length} files to batch`);
+      } else if (files.length > 1) {
+        // Auto-enable batch mode
+        setBatchMode(true);
+        const newItems = addBatchFiles(files);
+        
+        if (newItems.length > 0) {
+          setPosterUrl(newItems[0].url);
+          setCurrentBatchIndex(0);
+          
+          // Extract color if needed
+          if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
+            try {
+              const colors = await extractColorsFromImage(newItems[0].url);
+              setDynamicBackgroundColor(colors.dominant);
+            } catch (error) {
+              console.error('Color extraction error:', error);
+            }
+          }
+        }
+        
+        toast.success(`Batch mode activated with ${files.length} files`);
       } else {
         // Single file mode
-        handleFileSelect(e.target.files[0]);
+        handleFileSelect(files[0]);
       }
     }
-  }, [handleFileSelect, batchMode, addBatchFiles, setPosterUrl]);
+  }, [handleFileSelect, batchMode, addBatchFiles, posterUrl, setPosterUrl, selectedTemplate, setDynamicBackgroundColor]);
 
   // Template handlers
   const handleSelectTemplate = useCallback((template: typeof templates[0]) => {
@@ -655,10 +704,23 @@ export default function PosterComposer() {
               currentIndex={currentBatchIndex}
               isExporting={isBatchExporting}
               progress={batchProgress}
-              onSelectFile={(index) => {
+              onSelectFile={async (index) => {
                 setCurrentBatchIndex(index);
                 if (batchFiles[index]) {
                   setPosterUrl(batchFiles[index].url);
+                  
+                  // Extract color if needed when switching images
+                  if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
+                    try {
+                      // Show loading state if we want (optional)
+                      // const toastId = toast.loading('Extracting colors...');
+                      const colors = await extractColorsFromImage(batchFiles[index].url);
+                      setDynamicBackgroundColor(colors.dominant);
+                      // toast.dismiss(toastId);
+                    } catch (error) {
+                      console.error('Color extraction error:', error);
+                    }
+                  }
                 }
               }}
               onRemoveFile={(id) => {
@@ -672,6 +734,7 @@ export default function PosterComposer() {
                 setPosterUrl('');
               }}
               onExportAll={exportAllBatch}
+              onAddMore={() => fileInputRef.current?.click()}
             />
           )}
 

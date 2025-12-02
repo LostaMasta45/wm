@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useRef } from 'react';
 import { renderHDCanvas, RenderSettings, CachedImages } from './useCanvasRenderer';
+import { extractColorsFromImage } from '@/lib/colorExtractor';
+import JSZip from 'jszip';
 
 interface BatchFile {
   id: string;
@@ -80,7 +82,7 @@ export function useBatchExport({
     });
   };
 
-  const exportAll = useCallback(async () => {
+  const exportAll = useCallback(async (asZip: boolean = false) => {
     if (files.length === 0 || isExporting) return;
 
     setIsExporting(true);
@@ -88,6 +90,7 @@ export function useBatchExport({
     setProgress({ current: 0, total: files.length });
 
     let successCount = 0;
+    const zip = asZip ? new JSZip() : null;
 
     // Pre-load background and watermark images once (they're the same for all posters)
     let backgroundImage: HTMLImageElement | null = null;
@@ -116,6 +119,26 @@ export function useBatchExport({
         // Load the poster image
         const posterImage = await loadImage(file.url);
 
+        // Handle Dynamic Background Color
+        let currentDynamicColor = settings.dynamicBackgroundColor;
+        
+        if (settings.backgroundColor === '#DYNAMIC') {
+          try {
+            const colors = await extractColorsFromImage(file.url);
+            currentDynamicColor = colors.dominant;
+          } catch (err) {
+            console.warn(`Failed to extract color for ${file.name}, using default`, err);
+            // Fallback to current setting or white if null
+            currentDynamicColor = currentDynamicColor || '#FFFFFF';
+          }
+        }
+
+        // Create updated settings for this specific image
+        const currentSettings: RenderSettings = {
+          ...settings,
+          dynamicBackgroundColor: currentDynamicColor,
+        };
+
         // Create images object for rendering with template background & watermark
         const images: CachedImages = {
           background: backgroundImage,
@@ -124,33 +147,58 @@ export function useBatchExport({
         };
 
         // Render HD canvas
-        const blob = await renderHDCanvas(settings, images);
+        const blob = await renderHDCanvas(currentSettings, images);
 
         if (!blob) {
           throw new Error('Failed to create image blob');
         }
 
-        // Download
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
         const fileName = file.name.replace(/\.[^/.]+$/, '');
-        link.download = `poster-HD-${fileName}-${templateSlug}-${Date.now()}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        const finalFileName = `poster-HD-${fileName}-${templateSlug}-${Date.now()}.png`;
+
+        if (asZip && zip) {
+           zip.file(finalFileName, blob);
+        } else {
+          // Download individually
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = finalFileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }
 
         updateFileStatus(file.id, 'done');
         successCount++;
 
         // Small delay between downloads to prevent browser blocking
-        await new Promise(resolve => setTimeout(resolve, 300));
+        if (!asZip) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
       } catch (error) {
         console.error(`Failed to export ${file.name}:`, error);
         updateFileStatus(file.id, 'error');
         onError?.(error as Error, file.name);
       }
+    }
+
+    if (asZip && zip && successCount > 0) {
+        try {
+            const zipBlob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(zipBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `posters-batch-${templateSlug}-${Date.now()}.zip`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Failed to generate ZIP:', error);
+            onError?.(error as Error, 'ZIP generation');
+        }
     }
 
     setIsExporting(false);

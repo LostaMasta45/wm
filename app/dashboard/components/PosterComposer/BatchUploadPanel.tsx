@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Download, Trash2, Image as ImageIcon } from 'lucide-react';
+import { X, Download, Trash2, Image as ImageIcon, Plus, FileArchive } from 'lucide-react';
 
 interface BatchFile {
   id: string;
@@ -21,7 +21,8 @@ interface BatchUploadPanelProps {
   onSelectFile: (index: number) => void;
   onRemoveFile: (id: string) => void;
   onClearAll: () => void;
-  onExportAll: () => void;
+  onExportAll: (asZip?: boolean) => void;
+  onAddMore: () => void;
 }
 
 export default function BatchUploadPanel({
@@ -34,6 +35,7 @@ export default function BatchUploadPanel({
   onRemoveFile,
   onClearAll,
   onExportAll,
+  onAddMore,
 }: BatchUploadPanelProps) {
   if (!visible || files.length === 0) return null;
 
@@ -128,6 +130,18 @@ export default function BatchUploadPanel({
               </div>
             </motion.div>
           ))}
+
+          {/* Add More Button */}
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            onClick={onAddMore}
+            disabled={isExporting}
+            className="aspect-square rounded-lg border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 flex items-center justify-center transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Add more photos"
+          >
+            <Plus className="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
+          </motion.button>
         </div>
       </div>
 
@@ -160,22 +174,31 @@ export default function BatchUploadPanel({
         )}
       </AnimatePresence>
 
-      {/* Export Button */}
-      <div className="p-3 border-t border-border">
+      {/* Export Buttons */}
+      <div className="p-3 border-t border-border grid grid-cols-2 gap-2">
         <button
-          onClick={onExportAll}
+          onClick={() => onExportAll(false)}
           disabled={isExporting || files.length === 0}
-          className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="px-4 py-3 bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-lg font-bold text-sm transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+           <Download className="w-4 h-4" />
+           <span>Export All</span>
+        </button>
+        
+        <button
+          onClick={() => onExportAll(true)}
+          disabled={isExporting || files.length === 0}
+          className="px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {isExporting ? (
             <>
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              <span>Exporting... ({progress.current}/{progress.total})</span>
+              <span>Processing...</span>
             </>
           ) : (
             <>
-              <Download className="w-4 h-4" />
-              <span>Export All ({files.length}) HD</span>
+              <FileArchive className="w-4 h-4" />
+              <span>Download ZIP</span>
             </>
           )}
         </button>
