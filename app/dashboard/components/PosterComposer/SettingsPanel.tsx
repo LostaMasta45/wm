@@ -11,12 +11,15 @@ interface SettingsPanelProps {
   watermarkSize: number;
   watermarkOpacity: number;
   borderRadius: number;
+  blurIntensity: number;
+  isBlurMode: boolean;
   isSaving: boolean;
   templateName: string;
   onPaddingChange: (value: number) => void;
   onWatermarkSizeChange: (value: number) => void;
   onWatermarkOpacityChange: (value: number) => void;
   onBorderRadiusChange: (value: number) => void;
+  onBlurIntensityChange: (value: number) => void;
   onSaveSettings: () => void;
   onExport: () => void;
   onSaveToHistory: () => void;
@@ -31,12 +34,15 @@ export default function SettingsPanel({
   watermarkSize,
   watermarkOpacity,
   borderRadius,
+  blurIntensity,
+  isBlurMode,
   isSaving,
   templateName,
   onPaddingChange,
   onWatermarkSizeChange,
   onWatermarkOpacityChange,
   onBorderRadiusChange,
+  onBlurIntensityChange,
   onSaveSettings,
   onExport,
   onSaveToHistory,
@@ -71,7 +77,7 @@ export default function SettingsPanel({
                     Auto-saving...
                   </div>
                 )}
-            
+
                 <SliderWithInput
                   label="Padding"
                   value={padding}
@@ -120,6 +126,20 @@ export default function SettingsPanel({
                   maxLabel="100px"
                 />
 
+                {isBlurMode && (
+                  <SliderWithInput
+                    label="🌫️ Blur Intensity"
+                    value={blurIntensity}
+                    onChange={onBlurIntensityChange}
+                    min={5}
+                    max={80}
+                    step={1}
+                    unit="px"
+                    minLabel="5px"
+                    maxLabel="80px"
+                  />
+                )}
+
                 <button
                   onClick={onSaveSettings}
                   className="w-full px-4 py-3 bg-primary text-primary-foreground rounded-lg font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 touch-manipulation"
@@ -127,7 +147,7 @@ export default function SettingsPanel({
                   <Save className="w-4 h-4" />
                   <span>Save Settings for {templateName || 'Template'}</span>
                 </button>
-                
+
                 <p className="text-xs text-muted-foreground text-center">
                   Settings will be remembered for this template
                 </p>

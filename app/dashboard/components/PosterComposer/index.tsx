@@ -41,6 +41,8 @@ export default function PosterComposer() {
     setWatermarkSize,
     borderRadius,
     setBorderRadius,
+    blurIntensity,
+    setBlurIntensity,
     dynamicBackgroundColor,
     setDynamicBackgroundColor,
     addRecentExport,
@@ -56,7 +58,7 @@ export default function PosterComposer() {
   const [isSaving, setIsSaving] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<'3:4' | '4:5'>('3:4');
   const [isSavingToHistory, setIsSavingToHistory] = useState(false);
-  
+
   // Modal states
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [selectedTemplateForSettings, setSelectedTemplateForSettings] = useState<typeof templates[0] | null>(null);
@@ -66,15 +68,18 @@ export default function PosterComposer() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string>('');
-  
+
+  // Original image URL - preserved for re-cropping
+  const [originalPosterUrl, setOriginalPosterUrl] = useState<string>('');
+
   // Batch upload state
   const [batchMode, setBatchMode] = useState(false);
   const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
-  
+
   // Refs
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Theme
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -142,6 +147,7 @@ export default function PosterComposer() {
     aspectRatio,
     backgroundColor: selectedTemplate?.settings.backgroundColor || '#FFFFFF',
     dynamicBackgroundColor,
+    blurIntensity,
   };
 
   // Use batch export hook
@@ -194,7 +200,8 @@ export default function PosterComposer() {
       // Use original file without compression to maintain HD quality
       const localUrl = URL.createObjectURL(file);
       setPosterUrl(localUrl);
-      
+      setOriginalPosterUrl(localUrl); // Store original for re-cropping
+
       if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
         toast.loading('Extracting colors...', { id: 'color-extract' });
         try {
@@ -206,7 +213,7 @@ export default function PosterComposer() {
           toast.error('Failed to extract color', { id: 'color-extract' });
         }
       }
-      
+
       toast.success('Poster berhasil di-upload!');
     } catch (error) {
       console.error('Upload error:', error);
@@ -231,7 +238,7 @@ export default function PosterComposer() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
       if (files.length === 0) return;
@@ -239,12 +246,12 @@ export default function PosterComposer() {
       if (batchMode) {
         // Batch mode: add all files
         const newItems = addBatchFiles(files);
-        
+
         // If no poster is currently showing, show the first new one
         if (!posterUrl && newItems.length > 0) {
           setPosterUrl(newItems[0].url);
           setCurrentBatchIndex(0);
-          
+
           // Extract color if needed
           if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
             try {
@@ -255,17 +262,17 @@ export default function PosterComposer() {
             }
           }
         }
-        
+
         toast.success(`Added ${files.length} files to batch`);
       } else if (files.length > 1) {
         // Auto-enable batch mode
         setBatchMode(true);
         const newItems = addBatchFiles(files);
-        
+
         if (newItems.length > 0) {
           setPosterUrl(newItems[0].url);
           setCurrentBatchIndex(0);
-          
+
           // Extract color if needed
           if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
             try {
@@ -276,7 +283,7 @@ export default function PosterComposer() {
             }
           }
         }
-        
+
         toast.success(`Batch mode activated with ${files.length} files`);
       } else {
         // Single file mode
@@ -294,12 +301,12 @@ export default function PosterComposer() {
       if (batchMode) {
         // Batch mode: add all files
         const newItems = addBatchFiles(files);
-        
+
         // If no poster is currently showing, show the first new one
         if (!posterUrl && newItems.length > 0) {
           setPosterUrl(newItems[0].url);
           setCurrentBatchIndex(0);
-          
+
           // Extract color if needed
           if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
             try {
@@ -310,17 +317,17 @@ export default function PosterComposer() {
             }
           }
         }
-        
+
         toast.success(`Added ${files.length} files to batch`);
       } else if (files.length > 1) {
         // Auto-enable batch mode
         setBatchMode(true);
         const newItems = addBatchFiles(files);
-        
+
         if (newItems.length > 0) {
           setPosterUrl(newItems[0].url);
           setCurrentBatchIndex(0);
-          
+
           // Extract color if needed
           if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
             try {
@@ -331,7 +338,7 @@ export default function PosterComposer() {
             }
           }
         }
-        
+
         toast.success(`Batch mode activated with ${files.length} files`);
       } else {
         // Single file mode
@@ -524,6 +531,7 @@ export default function PosterComposer() {
 
   const handleRemove = useCallback(() => {
     setPosterUrl('');
+    setOriginalPosterUrl(''); // Clear original when removing
     setDynamicBackgroundColor(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [setPosterUrl, setDynamicBackgroundColor]);
@@ -542,7 +550,7 @@ export default function PosterComposer() {
   return (
     <>
       <Toaster position="top-center" richColors closeButton />
-      
+
       {/* Lazy-loaded Modals */}
       <Suspense fallback={<LoadingSpinner />}>
         {settingsModalOpen && selectedTemplateForSettings && (
@@ -556,7 +564,7 @@ export default function PosterComposer() {
             onUpdate={handleUpdateTemplate}
           />
         )}
-        
+
         {addTemplateModalOpen && (
           <AddTemplateModal
             isOpen={addTemplateModalOpen}
@@ -590,7 +598,7 @@ export default function PosterComposer() {
           />
         )}
       </Suspense>
-      
+
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -600,7 +608,7 @@ export default function PosterComposer() {
         onChange={handleChange}
         className="hidden"
       />
-      
+
       {/* Main Container */}
       <div className="min-h-screen bg-background">
         {/* Header */}
@@ -612,7 +620,7 @@ export default function PosterComposer() {
                   Poster Composer
                 </h1>
               </div>
-              
+
               <div className="flex items-center gap-2">
                 {/* Undo/Redo Buttons */}
                 {posterUrl && (
@@ -620,11 +628,10 @@ export default function PosterComposer() {
                     <button
                       onClick={undo}
                       disabled={!canUndo}
-                      className={`p-2 rounded-lg border transition-all ${
-                        canUndo
-                          ? 'border-border hover:bg-accent text-foreground hover:scale-105'
-                          : 'border-border/50 text-muted-foreground/50 cursor-not-allowed'
-                      }`}
+                      className={`p-2 rounded-lg border transition-all ${canUndo
+                        ? 'border-border hover:bg-accent text-foreground hover:scale-105'
+                        : 'border-border/50 text-muted-foreground/50 cursor-not-allowed'
+                        }`}
                       title="Undo (Ctrl+Z)"
                     >
                       <Undo2 className="w-4 h-4" />
@@ -632,11 +639,10 @@ export default function PosterComposer() {
                     <button
                       onClick={redo}
                       disabled={!canRedo}
-                      className={`p-2 rounded-lg border transition-all ${
-                        canRedo
-                          ? 'border-border hover:bg-accent text-foreground hover:scale-105'
-                          : 'border-border/50 text-muted-foreground/50 cursor-not-allowed'
-                      }`}
+                      className={`p-2 rounded-lg border transition-all ${canRedo
+                        ? 'border-border hover:bg-accent text-foreground hover:scale-105'
+                        : 'border-border/50 text-muted-foreground/50 cursor-not-allowed'
+                        }`}
                       title="Redo (Ctrl+Y)"
                     >
                       <Redo2 className="w-4 h-4" />
@@ -646,11 +652,10 @@ export default function PosterComposer() {
 
                 <button
                   onClick={() => setBatchMode(!batchMode)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm font-medium ${
-                    batchMode
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border hover:bg-accent text-foreground'
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm font-medium ${batchMode
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border hover:bg-accent text-foreground'
+                    }`}
                   title="Toggle Batch Mode"
                 >
                   <Layers className="w-4 h-4" />
@@ -708,7 +713,8 @@ export default function PosterComposer() {
                 setCurrentBatchIndex(index);
                 if (batchFiles[index]) {
                   setPosterUrl(batchFiles[index].url);
-                  
+                  setOriginalPosterUrl(batchFiles[index].url); // Set original for cropping
+
                   // Extract color if needed when switching images
                   if (selectedTemplate?.settings.backgroundColor === '#DYNAMIC') {
                     try {
@@ -724,9 +730,29 @@ export default function PosterComposer() {
                 }
               }}
               onRemoveFile={(id) => {
+                // Find the index of the file being removed
+                const removedIndex = batchFiles.findIndex(f => f.id === id);
+
+                // Remove the file first
                 removeBatchFile(id);
-                if (batchFiles.length <= 1) {
+
+                // Calculate new state based on what will be left after removal
+                const remainingFilesCount = batchFiles.length - 1;
+
+                if (remainingFilesCount <= 0) {
+                  // No files left, clear everything
                   setPosterUrl('');
+                  setCurrentBatchIndex(0);
+                } else if (removedIndex <= currentBatchIndex) {
+                  // If we removed file at or before current index, adjust index
+                  const newIndex = Math.max(0, currentBatchIndex - 1);
+                  // Get the file that will be at this position after removal
+                  const filesAfterRemoval = batchFiles.filter(f => f.id !== id);
+                  const newFile = filesAfterRemoval[Math.min(newIndex, filesAfterRemoval.length - 1)];
+                  if (newFile) {
+                    setCurrentBatchIndex(Math.min(newIndex, filesAfterRemoval.length - 1));
+                    setPosterUrl(newFile.url);
+                  }
                 }
               }}
               onClearAll={() => {
@@ -756,12 +782,14 @@ export default function PosterComposer() {
               onDrop={handleDrop}
               onFileSelect={() => fileInputRef.current?.click()}
               onCrop={() => {
-                setImageToCrop(posterUrl);
+                // Use original image for cropping, not the currently displayed (possibly cropped) version
+                setImageToCrop(originalPosterUrl || posterUrl);
                 setCropModalOpen(true);
               }}
               onRemove={handleRemove}
               onReset={handleReset}
               onAspectRatioChange={setAspectRatio}
+              onColorPick={setDynamicBackgroundColor}
               canvasRef={canvasRef}
             />
 
@@ -771,12 +799,15 @@ export default function PosterComposer() {
               watermarkSize={watermarkSize}
               watermarkOpacity={watermarkOpacity}
               borderRadius={borderRadius}
+              blurIntensity={blurIntensity}
+              isBlurMode={selectedTemplate?.settings.backgroundColor === '#BLUR'}
               isSaving={isSaving}
               templateName={selectedTemplate?.name || ''}
               onPaddingChange={setPadding}
               onWatermarkSizeChange={setWatermarkSize}
               onWatermarkOpacityChange={setWatermarkOpacity}
               onBorderRadiusChange={setBorderRadius}
+              onBlurIntensityChange={setBlurIntensity}
               onSaveSettings={handleSaveSettings}
               onExport={handleExport}
               onSaveToHistory={handleSaveToHistory}

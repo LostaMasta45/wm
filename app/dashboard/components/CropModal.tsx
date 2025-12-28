@@ -1,9 +1,14 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import ReactCrop, { Crop, PixelCrop } from 'react-image-crop';
-import 'react-image-crop/dist/ReactCrop.css';
-import { X, Check, Crop as CropIcon } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import Cropper, { Area, Point } from 'react-easy-crop';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  X, Check, Crop as CropIcon,
+  RotateCcw, ZoomIn, RotateCw,
+  FlipHorizontal, FlipVertical,
+  Maximize, Move
+} from 'lucide-react';
 
 interface CropModalProps {
   isOpen: boolean;
@@ -12,65 +17,309 @@ interface CropModalProps {
   imageUrl: string;
 }
 
-type AspectRatioPreset = '3:4' | '4:3' | '1:1' | '16:9' | 'free';
+type AspectRatioPreset = '3:4' | '4:5' | '1:1' | '4:3' | '16:9' | '9:16' | 'free';
+
+const ASPECT_RATIOS: { value: AspectRatioPreset; label: string; ratio: number | undefined }[] = [
+  { value: '3:4', label: '3:4', ratio: 3 / 4 },
+  { value: '4:5', label: '4:5', ratio: 4 / 5 },
+  { value: '1:1', label: '1:1', ratio: 1 },
+  { value: '4:3', label: '4:3', ratio: 4 / 3 },
+  { value: '16:9', label: '16:9', ratio: 16 / 9 },
+  { value: '9:16', label: '9:16', ratio: 9 / 16 },
+  { value: 'free', label: '✨', ratio: undefined },
+];
+
+// Custom Free Crop Component
+interface FreeCropAreaProps {
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  onCropChange: (area: { x: number; y: number; width: number; height: number }) => void;
+  initialCrop?: { x: number; y: number; width: number; height: number };
+}
+
+function FreeCropArea({ containerRef, onCropChange, initialCrop }: FreeCropAreaProps) {
+  const [crop, setCrop] = useState(initialCrop || { x: 50, y: 50, width: 200, height: 200 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState<string | null>(null);
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 });
+  const [startCrop, setStartCrop] = useState(crop);
+
+  // Get container bounds
+  const getContainerBounds = useCallback(() => {
+    if (!containerRef.current) return { width: 400, height: 400 };
+    const rect = containerRef.current.getBoundingClientRect();
+    return { width: rect.width, height: rect.height };
+  }, [containerRef]);
+
+  // Constrain crop to container
+  const constrainCrop = useCallback((newCrop: typeof crop) => {
+    const bounds = getContainerBounds();
+    const minSize = 50;
+
+    return {
+      x: Math.max(0, Math.min(newCrop.x, bounds.width - newCrop.width)),
+      y: Math.max(0, Math.min(newCrop.y, bounds.height - newCrop.height)),
+      width: Math.max(minSize, Math.min(newCrop.width, bounds.width - newCrop.x)),
+      height: Math.max(minSize, Math.min(newCrop.height, bounds.height - newCrop.y)),
+    };
+  }, [getContainerBounds]);
+
+  // Handle mouse/touch move
+  const handleMove = useCallback((clientX: number, clientY: number) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    if (isDragging) {
+      const dx = x - startPos.x;
+      const dy = y - startPos.y;
+      const newCrop = constrainCrop({
+        ...startCrop,
+        x: startCrop.x + dx,
+        y: startCrop.y + dy,
+      });
+      setCrop(newCrop);
+      onCropChange(newCrop);
+    } else if (isResizing) {
+      const dx = x - startPos.x;
+      const dy = y - startPos.y;
+      let newCrop = { ...startCrop };
+
+      if (isResizing.includes('e')) {
+        newCrop.width = Math.max(50, startCrop.width + dx);
+      }
+      if (isResizing.includes('w')) {
+        newCrop.x = Math.min(startCrop.x + startCrop.width - 50, startCrop.x + dx);
+        newCrop.width = Math.max(50, startCrop.width - dx);
+      }
+      if (isResizing.includes('s')) {
+        newCrop.height = Math.max(50, startCrop.height + dy);
+      }
+      if (isResizing.includes('n')) {
+        newCrop.y = Math.min(startCrop.y + startCrop.height - 50, startCrop.y + dy);
+        newCrop.height = Math.max(50, startCrop.height - dy);
+      }
+
+      newCrop = constrainCrop(newCrop);
+      setCrop(newCrop);
+      onCropChange(newCrop);
+    }
+  }, [isDragging, isResizing, startPos, startCrop, constrainCrop, onCropChange, containerRef]);
+
+  // Mouse events
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    handleMove(e.clientX, e.clientY);
+  }, [handleMove]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setIsResizing(null);
+  }, []);
+
+  // Touch events
+  const handleTouchMove = useCallback((e: TouchEvent) => {
+    if (e.touches.length === 1) {
+      handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  }, [handleMove]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsDragging(false);
+    setIsResizing(null);
+  }, []);
+
+  // Add/remove event listeners
+  useEffect(() => {
+    if (isDragging || isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd);
+    }
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isDragging, isResizing, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
+
+  // Initialize crop on mount
+  useEffect(() => {
+    const bounds = getContainerBounds();
+    const initialWidth = Math.min(250, bounds.width * 0.7);
+    const initialHeight = Math.min(300, bounds.height * 0.7);
+    const initCrop = {
+      x: (bounds.width - initialWidth) / 2,
+      y: (bounds.height - initialHeight) / 2,
+      width: initialWidth,
+      height: initialHeight,
+    };
+    setCrop(initCrop);
+    onCropChange(initCrop);
+  }, [getContainerBounds, onCropChange]);
+
+  const startDrag = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setStartPos({ x: clientX - rect.left, y: clientY - rect.top });
+    setStartCrop(crop);
+    setIsDragging(true);
+  };
+
+  const startResize = (corner: string) => (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setStartPos({ x: clientX - rect.left, y: clientY - rect.top });
+    setStartCrop(crop);
+    setIsResizing(corner);
+  };
+
+  const handleStyle = "absolute w-5 h-5 bg-white rounded-full border-3 border-purple-500 shadow-lg shadow-purple-500/50 z-20 touch-manipulation transform -translate-x-1/2 -translate-y-1/2 hover:scale-125 active:scale-110 transition-transform cursor-pointer";
+  const edgeStyle = "absolute bg-purple-500/50 z-10 touch-manipulation";
+
+  return (
+    <>
+      {/* Dark overlay outside crop area */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `
+            linear-gradient(to right, rgba(0,0,0,0.7) ${crop.x}px, transparent ${crop.x}px),
+            linear-gradient(to left, rgba(0,0,0,0.7) ${getContainerBounds().width - crop.x - crop.width}px, transparent ${getContainerBounds().width - crop.x - crop.width}px),
+            linear-gradient(to bottom, rgba(0,0,0,0.7) ${crop.y}px, transparent ${crop.y}px),
+            linear-gradient(to top, rgba(0,0,0,0.7) ${getContainerBounds().height - crop.y - crop.height}px, transparent ${getContainerBounds().height - crop.y - crop.height}px)
+          `
+        }}
+      />
+
+      {/* Crop area */}
+      <div
+        className="absolute cursor-move touch-manipulation select-none"
+        style={{
+          left: crop.x,
+          top: crop.y,
+          width: crop.width,
+          height: crop.height,
+          border: '3px solid rgba(168, 85, 247, 0.9)',
+          boxShadow: '0 0 0 2000px rgba(0,0,0,0.6), 0 0 30px rgba(168, 85, 247, 0.5)',
+        }}
+        onMouseDown={startDrag}
+        onTouchStart={startDrag}
+      >
+        {/* Grid lines */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute left-1/3 top-0 bottom-0 w-px bg-white/30" />
+          <div className="absolute left-2/3 top-0 bottom-0 w-px bg-white/30" />
+          <div className="absolute top-1/3 left-0 right-0 h-px bg-white/30" />
+          <div className="absolute top-2/3 left-0 right-0 h-px bg-white/30" />
+        </div>
+
+        {/* Move indicator */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="p-2 bg-black/50 rounded-full backdrop-blur-sm">
+            <Move className="w-5 h-5 text-white/70" />
+          </div>
+        </div>
+
+        {/* Corner handles */}
+        <div className={handleStyle} style={{ left: 0, top: 0, cursor: 'nwse-resize' }} onMouseDown={startResize('nw')} onTouchStart={startResize('nw')} />
+        <div className={handleStyle} style={{ left: '100%', top: 0, cursor: 'nesw-resize' }} onMouseDown={startResize('ne')} onTouchStart={startResize('ne')} />
+        <div className={handleStyle} style={{ left: 0, top: '100%', cursor: 'nesw-resize' }} onMouseDown={startResize('sw')} onTouchStart={startResize('sw')} />
+        <div className={handleStyle} style={{ left: '100%', top: '100%', cursor: 'nwse-resize' }} onMouseDown={startResize('se')} onTouchStart={startResize('se')} />
+
+        {/* Edge handles */}
+        <div className={handleStyle} style={{ left: '50%', top: 0, cursor: 'ns-resize' }} onMouseDown={startResize('n')} onTouchStart={startResize('n')} />
+        <div className={handleStyle} style={{ left: '50%', top: '100%', cursor: 'ns-resize' }} onMouseDown={startResize('s')} onTouchStart={startResize('s')} />
+        <div className={handleStyle} style={{ left: 0, top: '50%', cursor: 'ew-resize' }} onMouseDown={startResize('w')} onTouchStart={startResize('w')} />
+        <div className={handleStyle} style={{ left: '100%', top: '50%', cursor: 'ew-resize' }} onMouseDown={startResize('e')} onTouchStart={startResize('e')} />
+      </div>
+    </>
+  );
+}
 
 export default function CropModal({ isOpen, onClose, onCropComplete, imageUrl }: CropModalProps) {
-  const imgRef = useRef<HTMLImageElement>(null);
-  const [crop, setCrop] = useState<Crop>({
-    unit: '%',
-    width: 90,
-    height: 90,
-    x: 5,
-    y: 5
-  });
-  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  // Crop state
+  const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+
+  // Free crop state
+  const [freeCropArea, setFreeCropArea] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const freeCropContainerRef = useRef<HTMLDivElement>(null);
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0, naturalWidth: 0, naturalHeight: 0 });
+
+  // Flip state
+  const [flipH, setFlipH] = useState(false);
+  const [flipV, setFlipV] = useState(false);
+
+  // UI state
   const [aspectRatioPreset, setAspectRatioPreset] = useState<AspectRatioPreset>('3:4');
-  
-  // Calculate actual aspect ratio
-  const getAspectRatio = (): number | undefined => {
-    switch (aspectRatioPreset) {
-      case '3:4': return 3 / 4;
-      case '4:3': return 4 / 3;
-      case '1:1': return 1;
-      case '16:9': return 16 / 9;
-      case 'free': return undefined; // Free crop
-      default: return 3 / 4;
-    }
-  };
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Update aspect ratio and reset crop
-  const handleAspectRatioChange = (ratio: AspectRatioPreset) => {
-    setAspectRatioPreset(ratio);
-    // Reset crop with new aspect ratio
-    const aspectValue = getAspectRatioForPreset(ratio);
-    setCrop({
-      unit: '%',
-      width: 90,
-      height: aspectValue ? 90 / aspectValue : 90,
-      x: 5,
-      y: 5
+  // Check if free crop mode
+  const isFreeCrop = aspectRatioPreset === 'free';
+
+  // Get current aspect ratio
+  const currentAspectRatio = ASPECT_RATIOS.find(r => r.value === aspectRatioPreset)?.ratio;
+
+  // Handle crop complete for react-easy-crop
+  const onCropAreaComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
+
+  // Handle image load for free crop mode
+  const handleImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setImageSize({
+      width: img.width,
+      height: img.height,
+      naturalWidth: img.naturalWidth,
+      naturalHeight: img.naturalHeight,
     });
-  };
+  }, []);
 
-  const getAspectRatioForPreset = (preset: AspectRatioPreset): number | undefined => {
-    switch (preset) {
-      case '3:4': return 3 / 4;
-      case '4:3': return 4 / 3;
-      case '1:1': return 1;
-      case '16:9': return 16 / 9;
-      case 'free': return undefined;
-      default: return 3 / 4;
-    }
-  };
+  // Reset all transformations
+  const handleReset = useCallback(() => {
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setRotation(0);
+    setFlipH(false);
+    setFlipV(false);
+    setFreeCropArea(null);
+  }, []);
 
-  const createCroppedImage = async () => {
-    if (!completedCrop || !imgRef.current) return;
+  // Handle aspect ratio change
+  const handleAspectRatioChange = useCallback((preset: AspectRatioPreset) => {
+    setAspectRatioPreset(preset);
+    // Reset crop position when changing aspect ratio
+    setCrop({ x: 0, y: 0 });
+    setFreeCropArea(null);
+  }, []);
 
+  // Create cropped image
+  const createCroppedImage = useCallback(async () => {
     setIsProcessing(true);
-    
+
     try {
-      const image = imgRef.current;
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = reject;
+        image.src = imageUrl;
+      });
+
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
@@ -78,282 +327,398 @@ export default function CropModal({ isOpen, onClose, onCropComplete, imageUrl }:
         throw new Error('No 2d context');
       }
 
-      const scaleX = image.naturalWidth / image.width;
-      const scaleY = image.naturalHeight / image.height;
+      // Calculate the crop area based on mode
+      let cropX: number, cropY: number, cropWidth: number, cropHeight: number;
 
-      // Set canvas size to FULL RESOLUTION cropped area (HD quality)
-      const pixelCrop = {
-        x: completedCrop.x * scaleX,
-        y: completedCrop.y * scaleY,
-        width: completedCrop.width * scaleX,
-        height: completedCrop.height * scaleY,
-      };
+      if (isFreeCrop && freeCropArea && imageSize.width > 0) {
+        // Free crop mode - calculate from displayed coordinates to natural coordinates
+        const scaleX = image.naturalWidth / imageSize.width;
+        const scaleY = image.naturalHeight / imageSize.height;
 
-      canvas.width = pixelCrop.width;
-      canvas.height = pixelCrop.height;
+        cropX = freeCropArea.x * scaleX;
+        cropY = freeCropArea.y * scaleY;
+        cropWidth = freeCropArea.width * scaleX;
+        cropHeight = freeCropArea.height * scaleY;
+      } else if (croppedAreaPixels) {
+        // Fixed aspect ratio mode - use react-easy-crop result
+        // Apply rotation transform
+        const rotRad = (rotation * Math.PI) / 180;
+        const sin = Math.abs(Math.sin(rotRad));
+        const cos = Math.abs(Math.cos(rotRad));
+        const newWidth = image.naturalWidth * cos + image.naturalHeight * sin;
+        const newHeight = image.naturalWidth * sin + image.naturalHeight * cos;
 
-      // Enable high-quality image rendering
+        // Create a canvas for the rotated and flipped image
+        const rotatedCanvas = document.createElement('canvas');
+        rotatedCanvas.width = newWidth;
+        rotatedCanvas.height = newHeight;
+        const rotatedCtx = rotatedCanvas.getContext('2d');
+
+        if (!rotatedCtx) {
+          throw new Error('No 2d context for rotation');
+        }
+
+        // Move to the center of the canvas
+        rotatedCtx.translate(newWidth / 2, newHeight / 2);
+
+        // Rotate
+        rotatedCtx.rotate(rotRad);
+
+        // Apply flips
+        rotatedCtx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+
+        // Draw the image centered
+        rotatedCtx.drawImage(
+          image,
+          -image.naturalWidth / 2,
+          -image.naturalHeight / 2
+        );
+
+        // Set the final canvas size to the cropped area
+        canvas.width = croppedAreaPixels.width;
+        canvas.height = croppedAreaPixels.height;
+
+        // Enable high-quality rendering
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // Draw the cropped area from the rotated canvas
+        ctx.drawImage(
+          rotatedCanvas,
+          croppedAreaPixels.x,
+          croppedAreaPixels.y,
+          croppedAreaPixels.width,
+          croppedAreaPixels.height,
+          0,
+          0,
+          croppedAreaPixels.width,
+          croppedAreaPixels.height
+        );
+
+        // Convert to blob with high quality
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              throw new Error('Canvas is empty');
+            }
+            const croppedImageUrl = URL.createObjectURL(blob);
+            onCropComplete(croppedImageUrl);
+            setIsProcessing(false);
+            handleReset();
+            onClose();
+          },
+          'image/png',
+          1.0
+        );
+        return;
+      } else {
+        throw new Error('No crop area defined');
+      }
+
+      // Free crop mode rendering
+      canvas.width = cropWidth;
+      canvas.height = cropHeight;
+
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // Draw cropped image at FULL RESOLUTION
+      // Apply flips for free crop
+      if (flipH || flipV) {
+        ctx.translate(flipH ? canvas.width : 0, flipV ? canvas.height : 0);
+        ctx.scale(flipH ? -1 : 1, flipV ? -1 : 1);
+      }
+
       ctx.drawImage(
         image,
-        pixelCrop.x,
-        pixelCrop.y,
-        pixelCrop.width,
-        pixelCrop.height,
+        cropX,
+        cropY,
+        cropWidth,
+        cropHeight,
         0,
         0,
-        canvas.width,
-        canvas.height
+        cropWidth,
+        cropHeight
       );
 
-      // Convert to blob with HIGH QUALITY (98% for JPEG, or use PNG for lossless)
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          throw new Error('Canvas is empty');
-        }
-        const croppedImageUrl = URL.createObjectURL(blob);
-        onCropComplete(croppedImageUrl);
-        setIsProcessing(false);
-        onClose();
-      }, 'image/jpeg', 0.98);
+      // Convert to blob with high quality
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            throw new Error('Canvas is empty');
+          }
+          const croppedImageUrl = URL.createObjectURL(blob);
+          onCropComplete(croppedImageUrl);
+          setIsProcessing(false);
+          handleReset();
+          onClose();
+        },
+        'image/png',
+        1.0
+      );
     } catch (error) {
       console.error('Error creating cropped image:', error);
       setIsProcessing(false);
     }
-  };
+  }, [croppedAreaPixels, imageUrl, rotation, flipH, flipV, onCropComplete, onClose, handleReset, isFreeCrop, freeCropArea, imageSize]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md p-0 sm:p-4">
-      <div className="bg-background rounded-none sm:rounded-2xl shadow-2xl w-full h-full sm:h-auto sm:max-w-6xl sm:max-h-[90vh] overflow-hidden flex flex-col border-0 sm:border border-border/50">
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-md"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-border/50 bg-gradient-to-r from-background via-muted/30 to-background backdrop-blur-sm">
+        <motion.div
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-black/50 backdrop-blur-xl"
+        >
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-primary/20 to-primary/10 rounded-xl border border-primary/20">
-              <CropIcon className="w-5 h-5 text-primary" />
+            <div className="p-2 bg-gradient-to-br from-purple-500/30 to-pink-500/30 rounded-xl border border-purple-500/30">
+              <CropIcon className="w-5 h-5 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-lg sm:text-xl font-bold text-foreground">Crop Image</h2>
-              <p className="text-xs text-muted-foreground hidden sm:block">Drag corners and edges to adjust</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl hover:bg-destructive/10 transition-all group border border-transparent hover:border-destructive/20"
-            title="Close"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5 text-muted-foreground group-hover:text-destructive group-hover:rotate-90 transition-all" />
-          </button>
-        </div>
-
-        {/* Crop Area - Full Screen on Mobile, Contained on Desktop */}
-        <div className="relative flex-1 bg-gradient-to-br from-black via-gray-900 to-black" style={{ minHeight: '400px' }}>
-          {/* Instruction Badge */}
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none px-2">
-            <div className="bg-black/80 backdrop-blur-xl px-4 py-2 rounded-full border border-primary/30 shadow-2xl">
-              <p className="text-white text-xs sm:text-sm font-medium text-center flex items-center gap-2">
-                <CropIcon className="w-3.5 h-3.5 text-primary animate-pulse" />
-                <span className="hidden sm:inline">Drag the corners and edges to crop</span>
-                <span className="sm:hidden">Drag to crop</span>
+              <h2 className="text-lg font-bold text-white">Crop Image</h2>
+              <p className="text-xs text-white/50 hidden sm:block">
+                {isFreeCrop ? 'Drag corners to resize • Drag center to move' : 'Pinch to zoom • Drag to move'}
               </p>
             </div>
           </div>
 
-          <ReactCrop
-            crop={crop}
-            onChange={(c) => setCrop(c)}
-            onComplete={(c) => setCompletedCrop(c)}
-            aspect={getAspectRatio()}
-            className="max-w-full max-h-full"
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl hover:bg-white/10 transition-all group"
           >
-            <img
-              ref={imgRef}
-              src={imageUrl}
-              alt="Crop preview"
-              className="max-w-full max-h-full object-contain"
-              style={{ maxHeight: 'calc(90vh - 300px)' }}
+            <X className="w-5 h-5 text-white/70 group-hover:text-white group-hover:rotate-90 transition-all" />
+          </button>
+        </motion.div>
+
+        {/* Crop Area */}
+        <div className="relative flex-1 bg-black overflow-hidden">
+          {isFreeCrop ? (
+            // Free crop mode with custom resizable crop area
+            <div
+              ref={freeCropContainerRef}
+              className="relative w-full h-full flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)' }}
+            >
+              <img
+                src={imageUrl}
+                alt="Crop preview"
+                onLoad={handleImageLoad}
+                className="max-w-full max-h-full object-contain"
+                style={{
+                  transform: `scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1})`,
+                }}
+                draggable={false}
+              />
+              <FreeCropArea
+                containerRef={freeCropContainerRef}
+                onCropChange={setFreeCropArea}
+              />
+            </div>
+          ) : (
+            // Fixed aspect ratio mode with react-easy-crop
+            <Cropper
+              image={imageUrl}
+              crop={crop}
+              zoom={zoom}
+              rotation={rotation}
+              aspect={currentAspectRatio}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onRotationChange={setRotation}
+              onCropComplete={onCropAreaComplete}
+              cropShape="rect"
+              showGrid={true}
+              style={{
+                containerStyle: {
+                  background: 'linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%)',
+                },
+                cropAreaStyle: {
+                  border: '3px solid rgba(168, 85, 247, 0.8)',
+                  boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.7), 0 0 40px rgba(168, 85, 247, 0.4)',
+                },
+              }}
+              classes={{
+                containerClassName: 'touch-manipulation',
+              }}
             />
-          </ReactCrop>
-          
-          {/* Custom CSS for crop handles styling */}
-          <style jsx global>{`
-            /* React Image Crop container */
-            .ReactCrop {
-              max-width: 100%;
-              max-height: 100%;
-            }
-            
-            /* Crop selection overlay */
-            .ReactCrop__crop-selection {
-              border: 3px solid rgb(147, 51, 234) !important;
-              box-shadow: 
-                0 0 0 9999px rgba(0, 0, 0, 0.75),
-                0 0 30px rgba(147, 51, 234, 0.6),
-                inset 0 0 0 1px rgba(255, 255, 255, 0.2) !important;
-            }
-            
-            /* Rule of thirds grid */
-            .ReactCrop__rule-of-thirds-vt::before,
-            .ReactCrop__rule-of-thirds-vt::after,
-            .ReactCrop__rule-of-thirds-hz::before,
-            .ReactCrop__rule-of-thirds-hz::after {
-              background-color: rgba(255, 255, 255, 0.3) !important;
-            }
-            
-            /* ALL DRAG HANDLES - Base Style */
-            .ReactCrop__drag-handle {
-              width: 18px !important;
-              height: 18px !important;
-              background: linear-gradient(135deg, white 0%, #f3f4f6 100%) !important;
-              border: 3px solid rgb(147, 51, 234) !important;
-              border-radius: 50% !important;
-              box-shadow: 
-                0 0 0 2px rgba(0, 0, 0, 0.15),
-                0 4px 12px rgba(147, 51, 234, 0.5),
-                0 0 20px rgba(147, 51, 234, 0.4) !important;
-              transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            }
-            
-            /* CORNER HANDLES (4 points: nw, ne, sw, se) */
-            .ReactCrop__drag-handle.ord-nw,
-            .ReactCrop__drag-handle.ord-ne,
-            .ReactCrop__drag-handle.ord-sw,
-            .ReactCrop__drag-handle.ord-se {
-              width: 22px !important;
-              height: 22px !important;
-              background: linear-gradient(135deg, white 0%, rgb(147, 51, 234) 100%) !important;
-              border: 4px solid rgb(147, 51, 234) !important;
-              box-shadow: 
-                0 0 0 2px rgba(255, 255, 255, 0.3),
-                0 6px 18px rgba(147, 51, 234, 0.6),
-                0 0 35px rgba(147, 51, 234, 0.5),
-                inset 0 2px 4px rgba(255, 255, 255, 0.4) !important;
-            }
-            
-            /* EDGE HANDLES (4 points: n, e, s, w) */
-            .ReactCrop__drag-handle.ord-n,
-            .ReactCrop__drag-handle.ord-e,
-            .ReactCrop__drag-handle.ord-s,
-            .ReactCrop__drag-handle.ord-w {
-              width: 16px !important;
-              height: 16px !important;
-              background: linear-gradient(135deg, rgb(147, 51, 234) 0%, rgb(126, 34, 206) 100%) !important;
-              border: 3px solid white !important;
-              box-shadow: 
-                0 0 0 1px rgba(147, 51, 234, 0.4),
-                0 4px 12px rgba(0, 0, 0, 0.4),
-                0 0 18px rgba(147, 51, 234, 0.6) !important;
-            }
-            
-            /* HOVER EFFECTS */
-            .ReactCrop__drag-handle:hover {
-              transform: scale(1.3) !important;
-              box-shadow: 
-                0 0 0 4px rgba(147, 51, 234, 0.25),
-                0 8px 24px rgba(147, 51, 234, 0.7),
-                0 0 45px rgba(147, 51, 234, 0.6) !important;
-              z-index: 10 !important;
-            }
-            
-            /* Corner handles hover */
-            .ReactCrop__drag-handle.ord-nw:hover,
-            .ReactCrop__drag-handle.ord-ne:hover,
-            .ReactCrop__drag-handle.ord-sw:hover,
-            .ReactCrop__drag-handle.ord-se:hover {
-              background: linear-gradient(135deg, rgb(147, 51, 234) 0%, rgb(168, 85, 247) 100%) !important;
-              border-color: white !important;
-              transform: scale(1.4) rotate(45deg) !important;
-            }
-            
-            /* Edge handles hover */
-            .ReactCrop__drag-handle.ord-n:hover,
-            .ReactCrop__drag-handle.ord-e:hover,
-            .ReactCrop__drag-handle.ord-s:hover,
-            .ReactCrop__drag-handle.ord-w:hover {
-              background: linear-gradient(135deg, rgb(168, 85, 247) 0%, rgb(147, 51, 234) 100%) !important;
-              transform: scale(1.35) !important;
-            }
-            
-            /* ACTIVE/DRAGGING STATE */
-            .ReactCrop__drag-handle:active {
-              transform: scale(1.15) !important;
-              box-shadow: 
-                0 0 0 5px rgba(147, 51, 234, 0.35),
-                0 6px 20px rgba(147, 51, 234, 0.8),
-                0 0 55px rgba(147, 51, 234, 0.7) !important;
-            }
-            
-            /* Shimmer animation for aspect ratio buttons */
-            @keyframes shimmer {
-              0% { transform: translateX(-100%); }
-              100% { transform: translateX(100%); }
-            }
-            
-            .animate-shimmer {
-              animation: shimmer 2s infinite;
-            }
-          `}</style>
+          )}
+
+          {/* Quick Controls Overlay */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2">
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={handleReset}
+              className="p-3 bg-black/70 backdrop-blur-xl rounded-full border border-white/20 hover:border-purple-500/50 transition-all group"
+              title="Reset"
+            >
+              <RotateCcw className="w-5 h-5 text-white/70 group-hover:text-purple-400 transition-colors" />
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setFlipH(!flipH)}
+              className={`p-3 bg-black/70 backdrop-blur-xl rounded-full border transition-all ${flipH ? 'border-purple-500 bg-purple-500/20' : 'border-white/20 hover:border-purple-500/50'
+                }`}
+              title="Flip Horizontal"
+            >
+              <FlipHorizontal className={`w-5 h-5 transition-colors ${flipH ? 'text-purple-400' : 'text-white/70'}`} />
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setFlipV(!flipV)}
+              className={`p-3 bg-black/70 backdrop-blur-xl rounded-full border transition-all ${flipV ? 'border-purple-500 bg-purple-500/20' : 'border-white/20 hover:border-purple-500/50'
+                }`}
+              title="Flip Vertical"
+            >
+              <FlipVertical className={`w-5 h-5 transition-colors ${flipV ? 'text-purple-400' : 'text-white/70'}`} />
+            </motion.button>
+          </div>
         </div>
 
         {/* Bottom Controls */}
-        <div className="p-4 sm:p-6 border-t border-border/50 bg-gradient-to-r from-background via-muted/20 to-background backdrop-blur-sm space-y-4">
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="p-4 border-t border-white/10 bg-black/50 backdrop-blur-xl space-y-4"
+        >
+          {/* Zoom & Rotation Sliders - Only show for fixed aspect ratios */}
+          {!isFreeCrop && (
+            <div className="grid grid-cols-2 gap-4">
+              {/* Zoom */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-white/70 flex items-center gap-1.5">
+                    <ZoomIn className="w-3.5 h-3.5" />
+                    <span>Zoom</span>
+                  </label>
+                  <span className="text-xs font-mono text-purple-400">{zoom.toFixed(1)}x</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={0.1}
+                  value={zoom}
+                  onChange={(e) => setZoom(parseFloat(e.target.value))}
+                  className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500 
+                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 
+                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-r 
+                    [&::-webkit-slider-thumb]:from-purple-500 [&::-webkit-slider-thumb]:to-pink-500
+                    [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-purple-500/50
+                    [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/50
+                    [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125"
+                />
+              </div>
+
+              {/* Rotation */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-white/70 flex items-center gap-1.5">
+                    <RotateCw className="w-3.5 h-3.5" />
+                    <span>Rotation</span>
+                  </label>
+                  <span className="text-xs font-mono text-purple-400">{rotation}°</span>
+                </div>
+                <input
+                  type="range"
+                  min={-180}
+                  max={180}
+                  step={1}
+                  value={rotation}
+                  onChange={(e) => setRotation(parseInt(e.target.value))}
+                  className="w-full h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-purple-500
+                    [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 
+                    [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gradient-to-r 
+                    [&::-webkit-slider-thumb]:from-purple-500 [&::-webkit-slider-thumb]:to-pink-500
+                    [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:shadow-purple-500/50
+                    [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white/50
+                    [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-125"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Free crop mode hint */}
+          {isFreeCrop && (
+            <div className="text-center py-2">
+              <p className="text-sm text-white/50">
+                <span className="text-purple-400">✨ Free Crop Mode</span> — Drag corners or edges to resize, drag center to move
+              </p>
+            </div>
+          )}
+
           {/* Aspect Ratio Presets */}
-          <div className="space-y-3">
-            <label className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <div className="w-1 h-5 bg-primary rounded-full" />
-              <span>Aspect Ratio</span>
-              <span className="ml-auto text-xs font-normal px-3 py-1 rounded-full bg-primary/10 text-primary border border-primary/20">
-                {aspectRatioPreset === 'free' ? 'Free Form' : aspectRatioPreset}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-white/70 flex items-center gap-1.5">
+                <Maximize className="w-3.5 h-3.5" />
+                <span>Aspect Ratio</span>
+              </label>
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                {aspectRatioPreset === 'free' ? 'Free' : aspectRatioPreset}
               </span>
-            </label>
-            <div className="grid grid-cols-5 gap-2">
-              {(['3:4', '4:3', '1:1', '16:9', 'free'] as AspectRatioPreset[]).map((ratio) => (
-                <button
-                  key={ratio}
-                  onClick={() => handleAspectRatioChange(ratio)}
-                  className={`relative px-3 py-3 rounded-xl text-sm font-bold transition-all touch-manipulation group overflow-hidden ${
-                    aspectRatioPreset === ratio
-                      ? 'bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/30 scale-105'
-                      : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground border border-border/50 hover:border-primary/30 hover:scale-105'
-                  }`}
+            </div>
+            <div className="grid grid-cols-7 gap-1.5">
+              {ASPECT_RATIOS.map((ratio) => (
+                <motion.button
+                  key={ratio.value}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleAspectRatioChange(ratio.value)}
+                  className={`relative py-2.5 rounded-lg text-xs font-bold transition-all overflow-hidden ${aspectRatioPreset === ratio.value
+                      ? 'bg-gradient-to-br from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30'
+                      : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white border border-white/10'
+                    }`}
                 >
-                  {/* Shimmer effect for active button */}
-                  {aspectRatioPreset === ratio && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                  {aspectRatioPreset === ratio.value && (
+                    <motion.div
+                      layoutId="activeRatio"
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                      initial={false}
+                    />
                   )}
-                  <span className="relative z-10">
-                    {ratio === 'free' ? '✨' : ratio}
-                  </span>
-                </button>
+                  <span className="relative">{ratio.label}</span>
+                </motion.button>
               ))}
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="grid grid-cols-2 gap-3 pt-2">
-            <button
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={onClose}
-              className="px-6 py-3.5 bg-muted/50 text-foreground rounded-xl font-bold text-sm hover:bg-muted transition-all touch-manipulation border border-border/50 hover:border-border flex items-center justify-center gap-2 group"
+              className="px-6 py-3.5 bg-white/5 text-white rounded-xl font-bold text-sm hover:bg-white/10 transition-all border border-white/10 hover:border-white/20 flex items-center justify-center gap-2"
             >
-              <X className="w-4 h-4 group-hover:rotate-90 transition-transform" />
+              <X className="w-4 h-4" />
               <span>Cancel</span>
-            </button>
-            <button
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
               onClick={createCroppedImage}
               disabled={isProcessing}
-              className="relative px-6 py-3.5 bg-gradient-to-r from-primary via-primary to-primary/80 text-primary-foreground rounded-xl font-bold text-sm hover:shadow-2xl hover:shadow-primary/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden group"
+              className="relative px-6 py-3.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-bold text-sm hover:shadow-xl hover:shadow-purple-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 overflow-hidden group"
             >
               {/* Shine effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
-              
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-[200%] group-hover:translate-x-[200%] transition-transform duration-700" />
+
               {isProcessing ? (
                 <>
-                  <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   <span className="relative">Processing...</span>
                 </>
               ) : (
@@ -362,10 +727,10 @@ export default function CropModal({ isOpen, onClose, onCropComplete, imageUrl }:
                   <span className="relative">Apply Crop</span>
                 </>
               )}
-            </button>
+            </motion.button>
           </div>
-        </div>
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }

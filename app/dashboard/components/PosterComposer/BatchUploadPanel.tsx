@@ -79,7 +79,7 @@ export default function BatchUploadPanel({
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: index * 0.05 }}
               className={`
-                relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all group
+                relative aspect-square rounded-lg overflow-hidden cursor-pointer border-2 transition-all group touch-manipulation
                 ${currentIndex === index 
                   ? 'border-primary ring-2 ring-primary/20' 
                   : 'border-border hover:border-primary/50'
@@ -87,23 +87,37 @@ export default function BatchUploadPanel({
                 ${file.status === 'done' ? 'opacity-60' : ''}
                 ${file.status === 'error' ? 'border-destructive' : ''}
               `}
-              onClick={() => onSelectFile(index)}
+              onClick={(e) => {
+                // Prevent selecting if clicking on remove button area
+                const target = e.target as HTMLElement;
+                if (target.closest('button')) return;
+                onSelectFile(index);
+              }}
+              onTouchEnd={(e) => {
+                // Prevent double-tap zoom on mobile
+                e.preventDefault();
+                // Prevent selecting if touching on remove button area
+                const target = e.target as HTMLElement;
+                if (target.closest('button')) return;
+                onSelectFile(index);
+              }}
             >
               <img
                 src={file.url}
                 alt={file.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover pointer-events-none"
+                draggable={false}
               />
               
               {/* Status overlay */}
               {file.status === 'processing' && (
-                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/50 flex items-center justify-center pointer-events-none">
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 </div>
               )}
               
               {file.status === 'done' && (
-                <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center">
+                <div className="absolute inset-0 bg-green-500/30 flex items-center justify-center pointer-events-none">
                   <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
                     <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
@@ -112,20 +126,26 @@ export default function BatchUploadPanel({
                 </div>
               )}
 
-              {/* Remove button */}
+              {/* Remove button - visible on mobile with larger touch target */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
+                  onRemoveFile(file.id);
+                }}
+                onTouchEnd={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
                   onRemoveFile(file.id);
                 }}
                 disabled={isExporting}
-                className="absolute top-1 right-1 w-5 h-5 bg-black/70 hover:bg-destructive rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
+                className="absolute top-0.5 right-0.5 w-6 h-6 bg-black/70 hover:bg-destructive active:bg-destructive rounded-full flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 opacity-100 transition-opacity disabled:opacity-0 touch-manipulation z-10"
               >
                 <X className="w-3 h-3 text-white" />
               </button>
 
               {/* Index badge */}
-              <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-[10px] text-white font-mono">
+              <div className="absolute bottom-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-[10px] text-white font-mono pointer-events-none">
                 {index + 1}
               </div>
             </motion.div>

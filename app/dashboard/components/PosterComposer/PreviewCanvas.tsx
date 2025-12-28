@@ -2,13 +2,13 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, X, Crop, Palette, ZoomIn, ZoomOut, ImageIcon } from 'lucide-react';
+import { Upload, X, Crop, Palette, ZoomIn, ZoomOut, ImageIcon, Pipette } from 'lucide-react';
 import { Template } from '@/lib/store';
 import { useCanvasRenderer, RenderSettings, CachedImages } from './hooks';
 
 // Image Loading Skeleton Component
 const ImageLoadingSkeleton = ({ aspectRatio }: { aspectRatio: '3:4' | '4:5' }) => (
-  <div 
+  <div
     className="absolute inset-0 bg-muted animate-pulse rounded-lg flex items-center justify-center"
     style={{ aspectRatio: aspectRatio === '3:4' ? '3/4' : '4/5' }}
   >
@@ -39,6 +39,7 @@ interface PreviewCanvasProps {
   onRemove: () => void;
   onReset: () => void;
   onAspectRatioChange: (ratio: '3:4' | '4:5') => void;
+  onColorPick?: (color: string) => void;
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
 }
 
@@ -62,11 +63,16 @@ export default function PreviewCanvas({
   onRemove,
   onReset,
   onAspectRatioChange,
+  onColorPick,
   canvasRef,
 }: PreviewCanvasProps) {
   // Track canvas ready state
   const [isCanvasReady, setIsCanvasReady] = useState(false);
-  
+
+  // Color picker state
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [customColor, setCustomColor] = useState('');
+
   // Zoom state
   const [zoom, setZoom] = useState(1);
 
@@ -75,7 +81,7 @@ export default function PreviewCanvas({
 
   // Canvas ready state derived from props
   const isReady = !!(posterUrl && images.poster);
-  
+
   // Sync canvas ready state
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -116,26 +122,24 @@ export default function PreviewCanvas({
           </span>
           <span>Preview</span>
         </h2>
-        
+
         {/* Aspect Ratio Selector */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             onClick={() => onAspectRatioChange('3:4')}
-            className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-              aspectRatio === '3:4'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800'
-            }`}
+            className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${aspectRatio === '3:4'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800'
+              }`}
           >
             3:4
           </button>
           <button
             onClick={() => onAspectRatioChange('4:5')}
-            className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
-              aspectRatio === '4:5'
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800'
-            }`}
+            className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all ${aspectRatio === '4:5'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800'
+              }`}
           >
             4:5
           </button>
@@ -178,12 +182,11 @@ export default function PreviewCanvas({
 
               <div className="absolute inset-0 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 text-center">
                 {/* Animated Icon */}
-                <motion.div 
-                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-2xl flex items-center justify-center mb-4 sm:mb-5 ${
-                    dragActive 
-                      ? 'bg-primary text-primary-foreground' 
-                      : 'bg-gradient-to-br from-primary/10 to-accent/10 text-primary'
-                  }`}
+                <motion.div
+                  className={`w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-2xl flex items-center justify-center mb-4 sm:mb-5 ${dragActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-gradient-to-br from-primary/10 to-accent/10 text-primary'
+                    }`}
                   animate={dragActive ? { scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] } : {}}
                   transition={{ duration: 0.5, repeat: dragActive ? Infinity : 0 }}
                 >
@@ -193,7 +196,7 @@ export default function PreviewCanvas({
                     <Upload className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12" />
                   )}
                 </motion.div>
-                
+
                 <h3 className="text-base sm:text-lg md:text-xl font-bold text-foreground mb-2">
                   {dragActive ? 'Release to Upload!' : 'Drop Your Poster Here'}
                 </h3>
@@ -234,34 +237,33 @@ export default function PreviewCanvas({
             /* Canvas Preview */
             <div className="space-y-3">
               {/* Canvas Container */}
-              <div 
-                className="relative rounded-lg overflow-hidden border border-border" 
+              <div
+                className="relative rounded-lg overflow-hidden border border-border"
                 style={{ aspectRatio: aspectRatio === '3:4' ? '3/4' : '4/5' }}
               >
                 {/* Loading Skeleton */}
                 {(isImageLoading || !isCanvasReady) && posterUrl && (
                   <ImageLoadingSkeleton aspectRatio={aspectRatio} />
                 )}
-                
+
                 {/* Canvas */}
                 <canvas
                   ref={canvasRef}
-                  className={`w-full h-full transition-opacity duration-300 ${
-                    isCanvasReady ? 'opacity-100' : 'opacity-0'
-                  }`}
-                  style={{ 
+                  className={`w-full h-full transition-opacity duration-300 ${isCanvasReady ? 'opacity-100' : 'opacity-0'
+                    }`}
+                  style={{
                     display: 'block',
                     transform: `scale(${zoom})`,
                     transformOrigin: 'center center',
                     transition: 'transform 0.2s ease-out',
                   }}
                 />
-                
+
                 {/* Info Badge */}
                 <div className="absolute top-2 left-2 sm:top-3 sm:left-3 px-2 py-1 sm:px-3 sm:py-1.5 bg-primary backdrop-blur-sm rounded text-primary-foreground text-[10px] sm:text-xs font-semibold truncate max-w-[50%]">
                   {selectedTemplate?.name}
                 </div>
-                
+
                 <div className="absolute top-2 right-2 sm:top-3 sm:right-3 px-2 py-1 sm:px-3 sm:py-1.5 bg-primary backdrop-blur-sm rounded text-primary-foreground text-[10px] sm:text-xs font-mono">
                   1080x{aspectRatio === '3:4' ? '1440' : '1350'}
                 </div>
@@ -312,22 +314,85 @@ export default function PreviewCanvas({
                 </button>
               </div>
 
-              {/* Dynamic Color Badge */}
+              {/* Dynamic Color Badge with Color Picker */}
               {selectedTemplate?.settings.backgroundColor === '#DYNAMIC' && dynamicBackgroundColor && (
-                <div className="w-full p-3 bg-gradient-to-r from-primary/10 to-accent/10 border-2 border-primary/20 rounded-lg">
+                <div className="w-full p-3 bg-gradient-to-r from-primary/10 to-accent/10 border-2 border-primary/20 rounded-lg space-y-3">
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 flex-1">
                       <Palette className="w-4 h-4 text-primary" />
                       <span className="text-xs font-bold text-foreground">Dynamic Color Active</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div 
-                        className="w-8 h-8 rounded-lg border-2 border-white dark:border-black shadow-lg"
+                      <button
+                        onClick={() => setShowColorPicker(!showColorPicker)}
+                        className="w-8 h-8 rounded-lg border-2 border-white dark:border-black shadow-lg hover:scale-110 transition-transform cursor-pointer relative group"
                         style={{ backgroundColor: dynamicBackgroundColor }}
-                      />
+                        title="Click to pick color"
+                      >
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Pipette className="w-4 h-4 text-white" />
+                        </div>
+                      </button>
                       <span className="text-xs font-mono text-muted-foreground">{dynamicBackgroundColor}</span>
                     </div>
                   </div>
+
+                  {/* Color Picker Panel */}
+                  {showColorPicker && onColorPick && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="space-y-3 pt-3 border-t border-primary/20"
+                    >
+                      <p className="text-xs text-muted-foreground">Pick a color from the poster or enter manually:</p>
+
+                      {/* Color Palette - Quick picks */}
+                      <div className="flex flex-wrap gap-2">
+                        {['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9', '#F8B500', '#1ABC9C'].map((color) => (
+                          <button
+                            key={color}
+                            onClick={() => {
+                              onColorPick(color);
+                              setShowColorPicker(false);
+                            }}
+                            className="w-7 h-7 rounded-lg border-2 border-white/50 shadow hover:scale-110 transition-transform"
+                            style={{ backgroundColor: color }}
+                            title={color}
+                          />
+                        ))}
+                      </div>
+
+                      {/* Manual Color Input */}
+                      <div className="flex gap-2">
+                        <input
+                          type="color"
+                          value={customColor || dynamicBackgroundColor}
+                          onChange={(e) => setCustomColor(e.target.value)}
+                          className="w-10 h-10 rounded-lg cursor-pointer border-2 border-border"
+                        />
+                        <input
+                          type="text"
+                          value={customColor || dynamicBackgroundColor}
+                          onChange={(e) => setCustomColor(e.target.value)}
+                          placeholder="#FF0000"
+                          className="flex-1 px-3 py-2 bg-background border-2 border-border rounded-lg text-sm font-mono"
+                        />
+                        <button
+                          onClick={() => {
+                            if (customColor && /^#[0-9A-Fa-f]{6}$/.test(customColor)) {
+                              onColorPick(customColor);
+                              setShowColorPicker(false);
+                              setCustomColor('');
+                            }
+                          }}
+                          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-bold hover:opacity-90 transition-opacity"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
                 </div>
               )}
 

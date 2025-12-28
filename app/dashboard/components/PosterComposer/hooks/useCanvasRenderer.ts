@@ -10,6 +10,7 @@ export interface RenderSettings {
   aspectRatio: '3:4' | '4:5';
   backgroundColor: string;
   dynamicBackgroundColor: string | null;
+  blurIntensity: number; // 0-100, used when backgroundColor === '#BLUR'
 }
 
 export interface CachedImages {
@@ -42,15 +43,46 @@ export function useCanvasRenderer(
       canvas.height = height;
     }
 
-    // Background color
+    // Background color or blur
+    const isBlurMode = settings.backgroundColor === '#BLUR';
     const bgColor = settings.backgroundColor === '#DYNAMIC' && settings.dynamicBackgroundColor
       ? settings.dynamicBackgroundColor
       : settings.backgroundColor || '#FFFFFF';
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, width, height);
 
-    // Background image
-    if (images.background) {
+    // For blur mode, draw blurred poster first as background
+    if (isBlurMode && images.poster) {
+      try {
+        const posterImg = images.poster;
+        // Calculate how to cover the entire canvas
+        const scale = Math.max(width / posterImg.width, height / posterImg.height) * 1.2;
+        const scaledWidth = posterImg.width * scale;
+        const scaledHeight = posterImg.height * scale;
+        const x = (width - scaledWidth) / 2;
+        const y = (height - scaledHeight) / 2;
+
+        // Apply blur filter
+        const blurAmount = Math.round(settings.blurIntensity * 0.5); // Scale blur to reasonable pixel values
+        ctx.filter = `blur(${blurAmount}px)`;
+        ctx.drawImage(posterImg, x, y, scaledWidth, scaledHeight);
+        ctx.filter = 'none';
+
+        // Add semi-transparent overlay for better poster visibility
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+        ctx.fillRect(0, 0, width, height);
+      } catch (err) {
+        console.error('Blur background draw error:', err);
+        // Fallback to solid color
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, width, height);
+      }
+    } else {
+      // Standard solid color background
+      ctx.fillStyle = bgColor;
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    // Background image (only if not blur mode)
+    if (images.background && !isBlurMode) {
       try {
         ctx.drawImage(images.background, 0, 0, width, height);
       } catch (err) {
@@ -160,7 +192,7 @@ export async function renderHDCanvas(
 ): Promise<Blob | null> {
   const hdWidth = 2160;
   const hdHeight = settings.aspectRatio === '3:4' ? 2880 : 2700;
-  
+
   // Background color
   const bgColor = settings.backgroundColor === '#DYNAMIC' && settings.dynamicBackgroundColor
     ? settings.dynamicBackgroundColor
@@ -168,7 +200,7 @@ export async function renderHDCanvas(
 
   // Try OffscreenCanvas first for better performance (non-blocking)
   const useOffscreen = typeof OffscreenCanvas !== 'undefined';
-  
+
   if (useOffscreen) {
     try {
       const offscreen = new OffscreenCanvas(hdWidth, hdHeight);
@@ -207,11 +239,42 @@ function renderToCanvas(
   settings: RenderSettings,
   images: CachedImages
 ): void {
-  ctx.fillStyle = bgColor;
-  ctx.fillRect(0, 0, hdWidth, hdHeight);
+  const isBlurMode = settings.backgroundColor === '#BLUR';
 
-  // Background image
-  if (images.background) {
+  // For blur mode, draw blurred poster first as background
+  if (isBlurMode && images.poster) {
+    try {
+      const posterImg = images.poster;
+      // Calculate how to cover the entire canvas
+      const scale = Math.max(hdWidth / posterImg.width, hdHeight / posterImg.height) * 1.2;
+      const scaledWidth = posterImg.width * scale;
+      const scaledHeight = posterImg.height * scale;
+      const x = (hdWidth - scaledWidth) / 2;
+      const y = (hdHeight - scaledHeight) / 2;
+
+      // Apply blur filter (scaled for HD resolution)
+      const blurAmount = Math.round(settings.blurIntensity * 1.0); // Higher blur for HD
+      ctx.filter = `blur(${blurAmount}px)`;
+      ctx.drawImage(posterImg, x, y, scaledWidth, scaledHeight);
+      ctx.filter = 'none';
+
+      // Add semi-transparent overlay for better poster visibility
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+      ctx.fillRect(0, 0, hdWidth, hdHeight);
+    } catch (err) {
+      console.error('Blur background draw error:', err);
+      // Fallback to solid color
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, 0, hdWidth, hdHeight);
+    }
+  } else {
+    // Standard solid color background
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, hdWidth, hdHeight);
+  }
+
+  // Background image (only if not blur mode)
+  if (images.background && !isBlurMode) {
     ctx.drawImage(images.background, 0, 0, hdWidth, hdHeight);
   }
 

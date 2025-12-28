@@ -13,8 +13,9 @@ export type Template = {
     padding: number;
     watermarkOpacity: number;
     watermarkSize: number;
-    backgroundColor: string;
+    backgroundColor: string; // #DYNAMIC = extract color, #BLUR = blur poster background
     borderRadius?: number; // Corner radius for poster
+    blurIntensity?: number; // Blur amount for #BLUR mode (0-100)
   };
   isFavorite?: boolean;
   usageCount?: number;
@@ -51,13 +52,13 @@ interface PosterStore {
   loadTemplatesFromDB: () => Promise<void>;
   seedDefaultTemplates: () => Promise<void>;
   saveTemplateToDb: (template: Template) => Promise<void>;
-  
+
   // Images
   posterUrl: string;
   setPosterUrl: (url: string) => void;
   dynamicBackgroundColor: string | null;
   setDynamicBackgroundColor: (color: string | null) => void;
-  
+
   // Settings
   padding: number;
   setPadding: (padding: number) => void;
@@ -67,11 +68,13 @@ interface PosterStore {
   setWatermarkSize: (size: number) => void;
   borderRadius: number;
   setBorderRadius: (radius: number) => void;
+  blurIntensity: number;
+  setBlurIntensity: (intensity: number) => void;
   showGrid: boolean;
   setShowGrid: (show: boolean) => void;
   aspectRatio: '3:4' | '4:5';
   setAspectRatio: (ratio: '3:4' | '4:5') => void;
-  
+
   // Export
   exportedUrl: string;
   setExportedUrl: (url: string) => void;
@@ -91,11 +94,11 @@ interface PosterStore {
     size?: string;
     dimensions?: string;
   }) => void;
-  
+
   // Activities
   activities: Activity[];
   addActivity: (activity: Omit<Activity, 'id' | 'timestamp'>) => void;
-  
+
   // Achievements & Stats
   achievements: Record<string, Achievement>;
   unlockAchievement: (achievementId: string) => void;
@@ -107,7 +110,7 @@ interface PosterStore {
   };
   incrementStat: (stat: 'postersCreated' | 'aiUsageCount') => void;
   trackTemplateUsage: (templateId: string) => void;
-  
+
   // Actions
   reset: () => void;
 }
@@ -126,6 +129,21 @@ const defaultTemplates: Template[] = [
       padding: 8,
       watermarkOpacity: 0,
       watermarkSize: 30,
+    },
+  },
+  {
+    id: 'blur-background',
+    name: '🌫️ Blur Background',
+    brandSlug: 'blur',
+    thumbnail: '',
+    backgroundUrl: '',
+    watermarkUrl: '',
+    settings: {
+      backgroundColor: '#BLUR', // Special flag for blur poster background
+      padding: 8,
+      watermarkOpacity: 0,
+      watermarkSize: 30,
+      blurIntensity: 30, // Default blur intensity
     },
   },
   {
@@ -216,6 +234,7 @@ export const usePosterStore = create<PosterStore>()(
       watermarkOpacity: defaultTemplates[0].settings.watermarkOpacity,
       watermarkSize: defaultTemplates[0].settings.watermarkSize,
       borderRadius: 0,
+      blurIntensity: 30,
       showGrid: false,
       aspectRatio: '3:4',
       exportedUrl: '',
@@ -227,7 +246,7 @@ export const usePosterStore = create<PosterStore>()(
         templatesUsedSet: new Set(),
         aiUsageCount: 0,
       },
-      
+
       // Template actions
       setSelectedTemplate: (template) => {
         if (template) {
@@ -238,7 +257,7 @@ export const usePosterStore = create<PosterStore>()(
             watermarkSize: template.settings.watermarkSize,
             borderRadius: template.settings.borderRadius || 0,
           });
-          
+
           get().addActivity({
             type: 'template_change',
             title: 'Template Changed',
@@ -248,7 +267,7 @@ export const usePosterStore = create<PosterStore>()(
           set({ selectedTemplate: null });
         }
       },
-      
+
       toggleFavorite: (templateId) => {
         set((state) => ({
           templates: state.templates.map((t) =>
@@ -256,7 +275,7 @@ export const usePosterStore = create<PosterStore>()(
           ),
         }));
       },
-      
+
       updateTemplate: async (templateId, updates) => {
         const template = get().templates.find(t => t.id === templateId);
         if (!template) return;
@@ -269,10 +288,10 @@ export const usePosterStore = create<PosterStore>()(
           const selectedTemplate = state.selectedTemplate?.id === templateId
             ? { ...state.selectedTemplate, ...updates }
             : state.selectedTemplate;
-          
+
           // Also update current settings if this is the selected template
           const newState: any = { templates, selectedTemplate };
-          
+
           if (state.selectedTemplate?.id === templateId && updates.settings) {
             // Update current working settings
             if (updates.settings.padding !== undefined) newState.padding = updates.settings.padding;
@@ -280,20 +299,20 @@ export const usePosterStore = create<PosterStore>()(
             if (updates.settings.watermarkSize !== undefined) newState.watermarkSize = updates.settings.watermarkSize;
             if (updates.settings.borderRadius !== undefined) newState.borderRadius = updates.settings.borderRadius;
           }
-          
+
           return newState;
         });
 
         // Check if this is a default template
         const isDefaultTemplate = defaultTemplates.some(dt => dt.id === templateId);
-        
+
         if (isDefaultTemplate) {
           // Default templates - create/update in database to persist settings
           console.log(`Template "${template.name}" is a default template - syncing to database...`);
-          
+
           try {
             const updatedTemplate = { ...template, ...updates };
-            
+
             // Try to create or update in database
             const response = await fetch('/api/templates', {
               method: 'POST',
@@ -318,10 +337,10 @@ export const usePosterStore = create<PosterStore>()(
           }
           return; // Exit after handling default template
         }
-        
+
         // Check if templateId is a UUID (from database)
         const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(templateId);
-        
+
         if (isUUID) {
           // Sync with Supabase using UUID
           try {
@@ -345,7 +364,7 @@ export const usePosterStore = create<PosterStore>()(
           // For hardcoded ID templates, create/update in database by name
           try {
             const updatedTemplate = { ...template, ...updates };
-            
+
             // Try to create new template in database
             const response = await fetch('/api/templates', {
               method: 'POST',
@@ -364,7 +383,7 @@ export const usePosterStore = create<PosterStore>()(
               if (result.data) {
                 // Replace local template with database version (with UUID)
                 set((state) => ({
-                  templates: state.templates.map(t => 
+                  templates: state.templates.map(t =>
                     t.id === templateId ? { ...updatedTemplate, id: result.data.id } : t
                   ),
                   selectedTemplate: state.selectedTemplate?.id === templateId
@@ -386,7 +405,7 @@ export const usePosterStore = create<PosterStore>()(
           if (response.ok) {
             const data = await response.json();
             console.log('Loaded templates from DB:', data.data?.length || 0);
-            
+
             if (data.status === 'success' && Array.isArray(data.data) && data.data.length > 0) {
               // Convert database presets to Template format
               const loadedTemplates: Template[] = data.data.map((preset: any) => {
@@ -410,27 +429,28 @@ export const usePosterStore = create<PosterStore>()(
                 };
               });
 
-              // ALWAYS include Dynamic Color template at the beginning
+              // ALWAYS include Dynamic Color and Blur Background templates at the beginning
               const dynamicColorTemplate = defaultTemplates.find(t => t.id === 'dynamic-color');
-              const hasDynamicColor = loadedTemplates.some(t => t.id === 'dynamic-color');
-              
-              let finalTemplates = loadedTemplates;
-              if (dynamicColorTemplate && !hasDynamicColor) {
-                // Add Dynamic Color as first template
-                finalTemplates = [dynamicColorTemplate, ...loadedTemplates];
-              } else if (hasDynamicColor) {
-                // Move Dynamic Color to first position
-                const dynamicTemplate = finalTemplates.find(t => t.id === 'dynamic-color');
-                const otherTemplates = finalTemplates.filter(t => t.id !== 'dynamic-color');
-                if (dynamicTemplate) {
-                  finalTemplates = [dynamicTemplate, ...otherTemplates];
-                }
-              }
-              
-              console.log('✅ Templates loaded:', finalTemplates.length, 'templates (Dynamic Color included)');
+              const blurBackgroundTemplate = defaultTemplates.find(t => t.id === 'blur-background');
 
-              // Use final templates with Dynamic Color at the beginning
-              set({ 
+              // Filter out any existing dynamic/blur templates from loaded list
+              let otherTemplates = loadedTemplates.filter(t =>
+                t.id !== 'dynamic-color' &&
+                t.id !== 'blur-background' &&
+                t.settings.backgroundColor !== '#DYNAMIC' &&
+                t.settings.backgroundColor !== '#BLUR'
+              );
+
+              // Build final templates array with special templates first
+              let finalTemplates: Template[] = [];
+              if (dynamicColorTemplate) finalTemplates.push(dynamicColorTemplate);
+              if (blurBackgroundTemplate) finalTemplates.push(blurBackgroundTemplate);
+              finalTemplates = [...finalTemplates, ...otherTemplates];
+
+              console.log('✅ Templates loaded:', finalTemplates.length, 'templates (Dynamic Color & Blur included)');
+
+              // Use final templates with special templates at the beginning
+              set({
                 templates: finalTemplates,
                 selectedTemplate: finalTemplates[0], // Dynamic Color first
                 padding: finalTemplates[0]?.settings.padding || 8,
@@ -440,14 +460,14 @@ export const usePosterStore = create<PosterStore>()(
               });
               return; // IMPORTANT: Exit here, don't seed
             }
-            
+
             // Only seed if truly empty
             console.log('No templates in database, seeding defaults ONCE...');
             await get().seedDefaultTemplates();
           } else {
             console.error('API error loading templates - using defaults');
             // Use default templates (Dynamic Color first)
-            set({ 
+            set({
               templates: defaultTemplates,
               selectedTemplate: defaultTemplates[0], // Dynamic Color
             });
@@ -455,7 +475,7 @@ export const usePosterStore = create<PosterStore>()(
         } catch (error) {
           console.error('Failed to load templates from database:', error);
           // Use default templates (Dynamic Color first)
-          set({ 
+          set({
             templates: defaultTemplates,
             selectedTemplate: defaultTemplates[0], // Dynamic Color
           });
@@ -479,7 +499,7 @@ export const usePosterStore = create<PosterStore>()(
                   settings: template.settings,
                 }),
               });
-              
+
               if (response.ok) {
                 const result = await response.json();
                 if (result.data) {
@@ -493,22 +513,22 @@ export const usePosterStore = create<PosterStore>()(
               console.error(`Failed to seed template ${template.name}:`, err);
             }
           }
-          
+
           // Set templates from created ones or fallback to defaults
           if (createdTemplates.length > 0) {
-            set({ 
+            set({
               templates: createdTemplates,
               selectedTemplate: createdTemplates[0],
             });
           } else {
-            set({ 
+            set({
               templates: defaultTemplates,
               selectedTemplate: defaultTemplates[0],
             });
           }
         } catch (error) {
           console.error('Failed to seed templates:', error);
-          set({ 
+          set({
             templates: defaultTemplates,
             selectedTemplate: defaultTemplates[0],
           });
@@ -534,7 +554,7 @@ export const usePosterStore = create<PosterStore>()(
             if (result.data) {
               // Update template with new UUID from database
               set((state) => ({
-                templates: state.templates.map(t => 
+                templates: state.templates.map(t =>
                   t.id === template.id ? { ...t, id: result.data.id } : t
                 ),
                 selectedTemplate: state.selectedTemplate?.id === template.id
@@ -547,7 +567,7 @@ export const usePosterStore = create<PosterStore>()(
           console.error('Failed to save template to database:', error);
         }
       },
-      
+
       // Image actions
       setPosterUrl: (url) => {
         set({ posterUrl: url });
@@ -559,17 +579,18 @@ export const usePosterStore = create<PosterStore>()(
           });
         }
       },
-      
+
       // Settings actions
       setPadding: (padding) => set({ padding }),
       setWatermarkOpacity: (opacity) => set({ watermarkOpacity: opacity }),
       setWatermarkSize: (size) => set({ watermarkSize: size }),
       setBorderRadius: (radius) => set({ borderRadius: radius }),
+      setBlurIntensity: (intensity) => set({ blurIntensity: intensity }),
       setShowGrid: (show) => set({ showGrid: show }),
       setAspectRatio: (ratio) => set({ aspectRatio: ratio }),
       setExportedUrl: (url) => set({ exportedUrl: url }),
       setDynamicBackgroundColor: (color) => set({ dynamicBackgroundColor: color }),
-      
+
       // Export actions
       addRecentExport: (export_) => {
         const newExport = {
@@ -577,31 +598,31 @@ export const usePosterStore = create<PosterStore>()(
           ...export_,
           timestamp: Date.now(),
         };
-        
+
         set((state) => ({
           recentExports: [newExport, ...state.recentExports].slice(0, 20),
         }));
-        
+
         get().incrementStat('postersCreated');
         get().addActivity({
           type: 'export',
           title: 'Poster Exported',
           description: `Exported ${export_.templateName}`,
         });
-        
+
         // Check achievements
         const state = get();
         if (!state.achievements['first-export'].unlocked) {
           get().unlockAchievement('first-export');
         }
-        
+
         // Update speed demon progress
         const todayExports = state.recentExports.filter(
           e => Date.now() - e.timestamp < 24 * 60 * 60 * 1000
         ).length;
         get().updateAchievementProgress('speed-demon', todayExports);
       },
-      
+
       // Activity actions
       addActivity: (activity) => {
         const newActivity: Activity = {
@@ -613,7 +634,7 @@ export const usePosterStore = create<PosterStore>()(
           activities: [newActivity, ...state.activities].slice(0, 50),
         }));
       },
-      
+
       // Achievement actions
       unlockAchievement: (achievementId) => {
         set((state) => ({
@@ -627,15 +648,15 @@ export const usePosterStore = create<PosterStore>()(
           },
         }));
       },
-      
+
       updateAchievementProgress: (achievementId, progress) => {
         set((state) => {
           const achievement = state.achievements[achievementId];
           if (!achievement || achievement.unlocked) return {};
-          
+
           const newProgress = Math.min(progress, achievement.maxProgress || progress);
           const shouldUnlock = achievement.maxProgress && newProgress >= achievement.maxProgress;
-          
+
           return {
             achievements: {
               ...state.achievements,
@@ -649,7 +670,7 @@ export const usePosterStore = create<PosterStore>()(
           };
         });
       },
-      
+
       // Stats actions
       incrementStat: (stat) => {
         set((state) => ({
@@ -659,16 +680,16 @@ export const usePosterStore = create<PosterStore>()(
           },
         }));
       },
-      
+
       trackTemplateUsage: (templateId) => {
         set((state) => {
           const newSet = new Set(state.stats.templatesUsedSet);
           newSet.add(templateId);
-          
+
           // Update template master achievement
           const templatesUsed = newSet.size;
           get().updateAchievementProgress('template-master', templatesUsed);
-          
+
           return {
             stats: {
               ...state.stats,
@@ -677,7 +698,7 @@ export const usePosterStore = create<PosterStore>()(
           };
         });
       },
-      
+
       // Reset action
       reset: () => {
         const template = get().selectedTemplate;
