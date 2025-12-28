@@ -20,7 +20,7 @@ export interface CachedImages {
 }
 
 export function useCanvasRenderer(
-  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  canvasRef: React.RefObject<HTMLCanvasElement>,
   settings: RenderSettings,
   images: CachedImages,
   deps: unknown[] = []

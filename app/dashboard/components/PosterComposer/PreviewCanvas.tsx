@@ -40,7 +40,7 @@ interface PreviewCanvasProps {
   onReset: () => void;
   onAspectRatioChange: (ratio: '3:4' | '4:5') => void;
   onColorPick?: (color: string) => void;
-  canvasRef: React.RefObject<HTMLCanvasElement | null>;
+  canvasRef: React.RefObject<HTMLCanvasElement>;
 }
 
 export default function PreviewCanvas({
